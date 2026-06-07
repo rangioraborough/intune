@@ -57,8 +57,7 @@ fi
 ## Set the avatar
 dscl . delete /Users/$LoggedInUser jpegphoto
 dscl . delete /Users/$LoggedInUser Picture
-dsimport <(echo "0x0A 0x5C 0x3A 0x2C dsRecTypeStandard:Users 2 dsAttrTypeStandard:RecordName externalbinary:dsAttrTypeStandard:JPEGPhoto
-$LoggedInUser:$TempAvatar") /Local/Default M
+dscl . create /Users/$LoggedInUser Picture "$TempAvatar"
 if [ "$?" = "0" ]; then
     echo " $(date) | Avatar set successfully for $LoggedInUser"
 else
