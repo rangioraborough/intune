@@ -10,7 +10,6 @@ appname="SetUserAvatar"
 logandmetadir="/Library/Logs/Microsoft/IntuneScripts/$appname"
 log="$logandmetadir/$appname.log"
 
-## Check if the log directory has been created
 if [ -d $logandmetadir ]; then
     echo "# $(date) | Log directory already exists - $logandmetadir"
 else
@@ -18,7 +17,6 @@ else
     mkdir -p $logandmetadir
 fi
 
-# Start logging
 exec &> >(tee -a "$log")
 
 echo ""
@@ -27,7 +25,6 @@ echo "# $(date) | Starting $appname"
 echo "##############################################################"
 echo ""
 
-## Get logged-in user
 LoggedInUser=$(stat -f "%Su" /dev/console)
 if [[ -z "$LoggedInUser" || "$LoggedInUser" == "root" ]]; then
     echo " $(date) | No user logged in or running as root, exiting"
@@ -44,11 +41,14 @@ else
     echo " $(date) | Using teacher avatar"
 fi
 
-## Download the avatar
-TempAvatar="/tmp/avatar_$LoggedInUser.png"
-curl -L -o "$TempAvatar" "$AvatarURL"
+## Store avatar permanently on disk
+AvatarDir="/Library/RBS/Avatars"
+mkdir -p "$AvatarDir"
+AvatarPath="$AvatarDir/$LoggedInUser.png"
+
+curl -L -o "$AvatarPath" "$AvatarURL"
 if [ "$?" = "0" ]; then
-    echo " $(date) | Avatar downloaded to $TempAvatar"
+    echo " $(date) | Avatar downloaded to $AvatarPath"
 else
     echo " $(date) | Failed to download avatar"
     exit 1
@@ -56,8 +56,10 @@ fi
 
 ## Set the avatar
 dscl . delete /Users/$LoggedInUser jpegphoto
+sleep 1
 dscl . delete /Users/$LoggedInUser Picture
-dscl . create /Users/$LoggedInUser Picture "$TempAvatar"
+sleep 1
+dscl . create /Users/$LoggedInUser Picture "$AvatarPath"
 if [ "$?" = "0" ]; then
     echo " $(date) | Avatar set successfully for $LoggedInUser"
 else
@@ -65,8 +67,5 @@ else
     exit 1
 fi
 
-## Clean up
-rm "$TempAvatar"
-echo " $(date) | Temp file cleaned up"
 echo " $(date) | Avatar script complete"
 exit 0
