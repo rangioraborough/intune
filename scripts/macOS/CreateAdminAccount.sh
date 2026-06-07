@@ -30,7 +30,7 @@ echo ""
 ## Define your admin account details here
 ADMIN_USERNAME="itadmin"
 ADMIN_PASSWORD=""
-ADMIN_FULLNAME="Administrator"
+ADMIN_FULLNAME="IT Admin"
 
 ## Check if account already exists
 if id "$ADMIN_USERNAME" &>/dev/null; then
