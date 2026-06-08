@@ -31,12 +31,21 @@ defaults write /Library/Preferences/com.microsoft.autoupdate2 EnableCheckForUpda
 defaults write /Library/Preferences/com.microsoft.autoupdate2 StartDaemonOnAppLaunch -bool false
 echo " $(date) | MAU defaults written"
 
-## Unload MAU launch agent
+## Unload and remove launch agent
 if [ -f /Library/LaunchAgents/com.microsoft.update.agent.plist ]; then
     launchctl unload -w /Library/LaunchAgents/com.microsoft.update.agent.plist 2>/dev/null
-    echo " $(date) | MAU launch agent unloaded"
+    rm -f /Library/LaunchAgents/com.microsoft.update.agent.plist
+    echo " $(date) | MAU launch agent unloaded and removed"
 else
     echo " $(date) | MAU launch agent not found, skipping"
+fi
+
+## Remove MAU chain app cache
+if [ -d /Library/Caches/com.microsoft.autoupdate.fba ]; then
+    rm -rf /Library/Caches/com.microsoft.autoupdate.fba/
+    echo " $(date) | MAU chain app cache removed"
+else
+    echo " $(date) | MAU chain app cache not found, skipping"
 fi
 
 echo " $(date) | DisableMAU script complete"
