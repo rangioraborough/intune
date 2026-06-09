@@ -50,7 +50,7 @@ case $ModelName in
     MacBook\ Air*)  ModelCode=MBA;;
     MacBook\ Pro*)  ModelCode=MBP;;
     MacBook*)       ModelCode=MB;;
-    iMac*)          ModelCode=IMAC;;
+    iMac*)          ModelCode=iMac;;
     Mac\ Pro*)      ModelCode=PRO;;
     Mac\ mini*)     ModelCode=MINI;;
     Mac\ Studio*)   ModelCode=MS;;

@@ -32,6 +32,7 @@ if [ ! -d "/Applications/Google Chrome.app" ]; then
     if [ "$?" = "0" ]; then
         echo " $(date) | Mounting Chrome DMG"
         hdiutil attach /tmp/googlechrome.dmg -nobrowse -quiet
+        sleep 3
         echo " $(date) | Installing Chrome"
         cp -R "/Volumes/Google Chrome/Google Chrome.app" /Applications/
         hdiutil detach "/Volumes/Google Chrome" -quiet
@@ -46,21 +47,24 @@ fi
 
 ## Install VLC
 if [ ! -d "/Applications/VLC.app" ]; then
+    echo " $(date) | Getting latest VLC version"
+    VLC_VERSION=$(curl -s "https://api.github.com/repos/videolan/vlc/tags" | grep -o '"name": "[0-9.]*"' | head -1 | grep -o '[0-9.]*')
+    echo " $(date) | Latest VLC version: $VLC_VERSION"
     echo " $(date) | Downloading VLC"
-    curl -L -o /tmp/vlc.dmg "https://get.videolan.org/vlc/last/macosx/vlc-arm64.dmg"
+    curl -L -o /tmp/vlc.dmg "https://get.videolan.org/vlc/$VLC_VERSION/macosx/vlc-$VLC_VERSION-arm64.dmg"
     if [ "$?" = "0" ]; then
         echo " $(date) | Mounting VLC DMG"
-        hdiutil attach /tmp/vlc.dmg -nobrowse -quiet
-        ## Find the mounted VLC volume dynamically
-        VLC_VOLUME=$(hdiutil info | grep -i vlc | grep "Apple_HFS" | awk '{print $NF}')
-        echo " $(date) | VLC volume detected as $VLC_VOLUME"
-        if [ -n "$VLC_VOLUME" ]; then
+        hdiutil attach /tmp/vlc.dmg -nobrowse
+        sleep 5
+        VLC_VOLUME="/Volumes/VLC media player"
+        echo " $(date) | VLC volume set to $VLC_VOLUME"
+        if [ -d "$VLC_VOLUME" ]; then
             cp -R "$VLC_VOLUME/VLC.app" /Applications/
             hdiutil detach "$VLC_VOLUME" -quiet
             rm /tmp/vlc.dmg
             echo " $(date) | VLC installed successfully"
         else
-            echo " $(date) | Failed to detect VLC volume"
+            echo " $(date) | Failed to find VLC volume at $VLC_VOLUME"
             exit 1
         fi
     else
@@ -77,6 +81,7 @@ if [ ! -d "/Applications/Google Drive.app" ]; then
     if [ "$?" = "0" ]; then
         echo " $(date) | Mounting Google Drive DMG"
         hdiutil attach /tmp/googledrive.dmg -nobrowse -quiet
+        sleep 3
         echo " $(date) | Installing Google Drive"
         installer -pkg "/Volumes/Install Google Drive/GoogleDrive.pkg" -target /
         hdiutil detach "/Volumes/Install Google Drive" -quiet
