@@ -78,9 +78,9 @@ echo " $(date) | Status bar enabled"
 sudo -u "$LoggedInUser" defaults write com.apple.finder ShowPathbar -bool true
 echo " $(date) | Path bar enabled"
 
-## Show full path in title bar
-sudo -u "$LoggedInUser" defaults write com.apple.finder _FXShowPosixPathInTitle -bool true
-echo " $(date) | Full path in title bar enabled"
+## Show only folder name in title bar (not full path)
+sudo -u "$LoggedInUser" defaults write com.apple.finder _FXShowPosixPathInTitle -bool false
+echo " $(date) | Full path in title bar disabled"
 
 ## Default to list view
 sudo -u "$LoggedInUser" defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"

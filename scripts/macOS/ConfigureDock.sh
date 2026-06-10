@@ -36,9 +36,15 @@ echo " $(date) | Logged in user detected as $LoggedInUser"
 ## Define dock apps - modify this list as needed
 declare -a DockApps=(
     "/Applications/Google Chrome.app"
-    "/Applications/Company Portal.app"
-    "/System/Applications/Mail.app"
+    "/Applications/Google Drive.app"
     "/System/Applications/Calendar.app"
+    "/Applications/Classview.app"
+    "/System/Applications/Mail.app"
+    "/Applications/Company Portal.app"
+    "/Applications/Microsoft Word.app"
+    "/Applications/Microsoft Excel.app"
+    "/Applications/Microsoft PowerPoint.app"
+    "/Applications/Classroom.app"
     "/System/Applications/System Settings.app"
 )
 
