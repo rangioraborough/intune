@@ -1,132 +1,64 @@
-# TODO — cleanup from 2026-06-12 troubleshooting session
+# TODO — Apeos / Rosetta / InstallApps remediation (2026-06-12 → 2026-06-15)
 
 Context: Dee's MacBook Air (macOS 26.5.1 / Tahoe, arm64) wasn't getting Intune-pushed apps.
-Root cause was a cascading deadlock between the Apeos PKG, missing Rosetta 2, and the
-InstallApps retry storm. We patched Dee's device but the underlying issues remain.
+Root cause turned out to be **two** things compounding:
+1. Failing PKG **LOB app** policies (Apeos printer driver, gated on Rosetta; and a
+   misconfigured Company Portal app) retry every ~10s — a storm.
+2. The Intune agent's script-orchestration loop **terminates managed scripts ~every 10s**
+   during provisioning, which is shorter than long installs (Rosetta, 250 MB Chrome) take —
+   so InstallApps got killed mid-Rosetta every cycle and never finished. `nohup`/`setsid`
+   detachment was also killed; only a **LaunchDaemon** survives.
+
+Final architecture (all live as of 2026-06-15, confirmed working on Dee):
+
+- **[InstallApps.sh](scripts/macOS/InstallApps.sh)** is now a thin **launcher** (the script
+  assigned in Intune). It fetches the worker from GitHub, writes a one-shot LaunchDaemon, and
+  bootstraps it, then exits 0 immediately.
+- **[InstallApps-worker.sh](scripts/macOS/InstallApps-worker.sh)** does the real installs as a
+  launchd job (owned by PID 1, so the agent can't kill it): Rosetta first → Apeos printer PKG
+  (curled from GitHub) → Chrome → VLC → Drive → Zoom → Classview. Removes its plist on finish.
+- The **Apeos PKG and Company Portal are no longer Intune LOB apps** — they're installed by
+  script ([InstallApps-worker.sh](scripts/macOS/InstallApps-worker.sh) and
+  [InstallCompanyPortal.sh](scripts/macOS/InstallCompanyPortal.sh)). This is what removed the
+  storm. Shell scripts don't have the aggressive app-retry behaviour.
+
+See memory `intune-agent-kills-long-scripts` for the durable write-up.
 
 ---
 
-## 1. InstallApps.sh — reorder Rosetta to run first — ✅ DONE 2026-06-15
+## ✅ DONE
 
-[scripts/macOS/InstallApps.sh](scripts/macOS/InstallApps.sh)
-
-Rosetta now runs **first**, before the Chrome download. It's gated on `hw.optional.arm64`
-(Intel Macs skip cleanly) and verified via `pgrep oahd` after install rather than trusting
-`softwareupdate`'s exit code.
-
-Failure handling resolved at the same time: **best-effort + report failure**. Each app
-install failure increments an `errors` counter and the script continues; the script
-`exit 1`s at the end if any step failed (so Intune marks the policy Failed and retries,
-keeping partial failures visible). The old inconsistent VLC `exit 1` was removed.
-
-Still needs to be pushed into Intune and validated on a device.
-
----
-
-## 2. Add a dedicated InstallRosetta.sh Intune shell script — ❌ DROPPED 2026-06-15
-
-Decided against it. Intune script *ordering between policies* isn't controllable, so a
-separate Rosetta policy buys nothing — nothing in InstallApps needs Rosetta anyway, and the
-only real consumer (the Apeos PKG, a separate LOB app) converges on its own via Intune retry
-once Rosetta is present. Keeping Rosetta as the **first step of InstallApps.sh** (item #1)
-gives controllable internal order and one script to maintain.
+- **Rosetta first + best-effort error handling** — in the worker; gated on `hw.optional.arm64`,
+  verified via `pgrep oahd`.
+- **Apeos drivers via script** — worker curls
+  [the PKG](packages/FUJIFILM%20PS%20Plug-in%20Installer.pkg) from GitHub raw and installs it
+  after Rosetta. Removed from Intune Apps. Confirmed installed on Dee + all 4 copier queues
+  came up via [ConfigurePrinters.sh](scripts/macOS/ConfigurePrinters.sh).
+- **Company Portal via script** — removed the misconfigured Intune app (detection pointed at
+  `com.microsoft.autoupdate2`); [InstallCompanyPortal.sh](scripts/macOS/InstallCompanyPortal.sh)
+  shell-script policy is assigned and handles it.
+- **Launcher + LaunchDaemon worker** — the fix that lets long installs complete.
+- **VLC fix** — switched from the rate-limited GitHub tags API to VideoLAN's `last/macosx/`
+  directory. Confirmed installing.
+- **Homebrew** — dropped from the worker (itadmin dependency, not needed).
+- Dee confirmed: Rosetta, Apeos + queues, Chrome, Drive, Zoom, Classview, VLC all installed
+  with no manual intervention and no storm.
 
 ---
 
-## 3. Apeos PS Plug-in is gated on Rosetta 2
+## ⏳ REMAINING
 
-[packages/FUJIFILM PS Plug-in Installer.pkg](packages/FUJIFILM%20PS%20Plug-in%20Installer.pkg)
+### A. Paste the final launcher into Intune + reset test
+The launchd **launcher** must be the version live in the Intune InstallApps script policy
+(replaces all earlier pastes). Worker changes need no re-paste — the launcher pulls from
+GitHub each run. Then reset a device and watch it come up clean.
 
-The PKG contains Intel-only `.plugin` bundles. macOS's `installer` pre-validates and refuses
-to install on Apple Silicon devices without Rosetta 2. This is the **actual root cause** of
-the whole InstallApps deadlock — once Rosetta isn't there, the PKG fails, Intune retries
-forever, the daemon thrashes, sibling scripts get killed.
+### B. Item #6 — App install-status alerting (still open)
+Dee's device sat "Failed" with `0x87D30143` since 10/06 and nobody noticed until the user
+reported it. Set up a Reports → App install status export (weekly) to the sysadmin mailbox.
+(Lower priority now that the Apeos PKG is no longer an app policy that can fail this way.)
 
-Rosetta is still supported by Apple through macOS 27 (per Apple support article 102527);
-removal is scheduled for macOS 28. So `softwareupdate --install-rosetta --agree-to-license`
-should keep working on the OS versions we care about right now. The earlier failure on Dee's
-device (returning "Rosetta 2 update is not available") was likely transient — the daemon was
-in the middle of a retry storm and softwareupdate's catalog fetch probably timed out.
-
-**Action:** items #1 (reorder Rosetta first in InstallApps.sh) and #2 (dedicated Intune
-Rosetta script) are the structural fix — make sure Rosetta is installed before any device is
-asked to install the Apeos PKG. Once those are in place, Tahoe devices will work the same as
-Sequoia devices.
-
-Longer term, before macOS 28 ships, check FUJIFILM for a Universal-binary update of the PS
-Plug-in so the Rosetta dependency goes away.
-
----
-
-## 4. Intune Photocopier Drivers app — detection rule already fixed, but verify
-
-**Already done** during the session: detection rule changed from the five PDE plug-in bundle
-IDs (`com.fujifilm.fb.e15.pde.*`) to the PKG receipt identifier
-`com.fujifilm.fb.print.ps.apon.202104.installer` with **Ignore app version: Yes**.
-
-**Action:** confirm post-fix that:
-- Devices where the PKG installed pre-fix (Taara's MBP, iMac-Sysadmin) still report
-  "Installed" under Apps → Photocopier Drivers → Device install status.
-- Dee's MacBook now reports "Installed" (we manually placed the receipt via local install of
-  the PKG after installing Rosetta — see Dee's device note below).
-
-If any device flips to "Not installed" after the change, the receipt-based check isn't seeing
-something it should, and we'd need a hybrid detection rule.
-
----
-
-## 5. Dee's MacBook Air — current state and follow-up
-
-We did the following on `dee.teddy@10.46.0.89` during the session:
-- Restarted the Intune daemon (`launchctl kickstart -k system/com.microsoft.intuneMDMAgent.daemon`)
-- Manually attempted to install the Apeos PKG — **failed** because Rosetta isn't installable
-- Company Portal did install during the same window
-
-**Open items for Dee's device:**
-- Apeos PKG is **not installed** (Rosetta blocked it). Either install via the manual driver
-  source once item #3 is resolved, or accept it as a known unsupported state on this Tahoe device.
-- Verify InstallApps.sh now runs cleanly end-to-end (Chrome, VLC, Drive, Zoom, Classview,
-  Homebrew). Last check at ~15:32 NZST 12/06 still showed Chrome download getting chopped —
-  needs a re-check after the daemon retry storm has fully settled (or after item #1 lands).
-- Decide whether to investigate the local `sidecar.sqlite` cache corruption hypothesis or
-  just monitor.
-
----
-
-## 6. Intune installation status alerting
-
-The Apps → Photocopier Drivers → Device install status page showed Dee's device as "Failed"
-with `0x87D30143 — The file provided is not supported` since 10/06 22:53. Nobody noticed
-until Dee reported the symptom. A simple report subscription or weekly check would have
-flagged this much earlier and saved the cascade.
-
-**Action:** consider a Reports → App install status export (weekly) or whatever the
-admin-centre equivalent is, sent to the sysadmin mailbox.
-
----
-
-## 7. Investigate the InstallApps retry storm pattern
-
-When one LOB PKG fails repeatedly (here: Photocopier Drivers), the Intune daemon's
-script-orchestration loop runs hot enough to interrupt sibling scripts (like InstallApps)
-mid-download. Symptoms seen: 414 InstallApps starts in ~3.5 hours, zero completions, Chrome
-download killed at 0–10 % every cycle, daemon log rotating every ~1.5 min at 1 MB.
-
-This means one bad LOB assignment can break the entire macOS Intune script policy stack.
-Once the failing app is sorted (item #3), the storm goes away — but the fact that it can
-happen at all is worth knowing.
-
-**Action:** no code change, just awareness. If we ever add more LOB PKGs, monitor
-`/Library/Logs/Microsoft/Intune/` log rotation rate as a health check.
-
----
-
-## 8. Minor cleanups noted in passing — ✅ DONE 2026-06-15
-
-Both scripts are now committed (commit `2c4c1b7`); working tree is clean.
-- [scripts/macOS/InstallCompanyPortal.sh](scripts/macOS/InstallCompanyPortal.sh) — committed.
-  Note: Intune is also delivering Company Portal directly via PKG policy (seen installing via
-  the daemon), so the script is belt-and-suspenders; revisit if it ever causes duplicate-install
-  noise.
-- `InstallApps.sh` — committed, then further hardened under item #1 (Rosetta-first + error
-  counter). Not yet committed: the item #1 changes are in the working tree awaiting commit.
+### C. Longer term
+Before macOS 28 (Rosetta removal), check FUJIFILM for a Universal-binary PS Plug-in so the
+Rosetta dependency goes away. Also revisit whether Company Portal should ever return to an
+app policy once its detection is fixed.
