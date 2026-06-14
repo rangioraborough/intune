@@ -104,11 +104,13 @@ fi
 
 ## Install VLC
 if [ ! -d "/Applications/VLC.app" ]; then
-    echo " $(date) | Getting latest VLC version"
-    VLC_VERSION=$(curl -s "https://api.github.com/repos/videolan/vlc/tags" | grep -o '"name": "[0-9.]*"' | head -1 | grep -o '[0-9.]*')
-    echo " $(date) | Latest VLC version: $VLC_VERSION"
+    echo " $(date) | Finding latest VLC (arm64)"
+    # Use VideoLAN's own 'last' directory — the GitHub API tag scrape was unreliable
+    # (rate-limited from the device, returned an empty version -> broken download URL).
+    VLC_DMG=$(curl -s --connect-timeout 30 "https://get.videolan.org/vlc/last/macosx/" | grep -oE 'vlc-[0-9.]+-arm64\.dmg' | head -1)
+    echo " $(date) | Latest VLC dmg: ${VLC_DMG:-<none found>}"
     echo " $(date) | Downloading VLC"
-    curl -L --connect-timeout 30 --max-time 300 -o /tmp/vlc.dmg "https://get.videolan.org/vlc/$VLC_VERSION/macosx/vlc-$VLC_VERSION-arm64.dmg"
+    curl -L --connect-timeout 30 --max-time 300 -o /tmp/vlc.dmg "https://get.videolan.org/vlc/last/macosx/${VLC_DMG}"
     if [ "$?" = "0" ]; then
         echo " $(date) | Mounting VLC DMG"
         hdiutil attach /tmp/vlc.dmg -nobrowse
