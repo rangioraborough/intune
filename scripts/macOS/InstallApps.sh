@@ -2,214 +2,43 @@
 
 ############################################################################################
 ##
-## Script to install Google Chrome, VLC, Google Drive and Zoom
+## InstallApps LAUNCHER — this is the script assigned in Intune.
+##
+## The Intune agent terminates the scripts it manages roughly every ~10 seconds during
+## provisioning convergence — far shorter than the installs take (Rosetta is minutes, Chrome
+## is ~250 MB). So this launcher does NO slow work: it fetches the worker from GitHub and
+## starts it DETACHED in its own session (perl setsid -> reparents to launchd), then exits 0
+## immediately. The agent records a fast success and stops killing it; the worker runs the
+## real installs uninterrupted.
+##
+## All install logic lives in InstallApps-worker.sh — edit and push that; no Intune re-paste
+## needed (the launcher pulls the latest worker each run).
 ##
 ############################################################################################
 
 appname="InstallApps"
 logandmetadir="/Library/Logs/Microsoft/IntuneScripts/$appname"
 log="$logandmetadir/$appname.log"
+worker="$logandmetadir/$appname.worker.sh"
+workerurl="https://raw.githubusercontent.com/rangioraborough/intune/main/scripts/macOS/InstallApps-worker.sh"
 
-if [ -d $logandmetadir ]; then
-    echo "# $(date) | Log directory already exists - $logandmetadir"
-else
-    echo "# $(date) | Creating log directory - $logandmetadir"
-    mkdir -p $logandmetadir
+[ -d "$logandmetadir" ] || mkdir -p "$logandmetadir"
+
+# A worker is already running — leave it alone and report success.
+if /usr/bin/pgrep -fq "$appname.worker.sh"; then
+    echo "# $(date) | Worker already running, launcher exiting" >> "$log"
+    exit 0
 fi
 
-exec &> >(tee -a "$log")
-
-echo ""
-echo "##############################################################"
-echo "# $(date) | Starting $appname"
-echo "##############################################################"
-echo ""
-
-## Install Google Chrome
-if [ ! -d "/Applications/Google Chrome.app" ]; then
-    echo " $(date) | Downloading Google Chrome"
-    curl -L --connect-timeout 30 --max-time 300 -o /tmp/googlechrome.dmg "https://dl.google.com/chrome/mac/universal/stable/googlechrome.dmg"
-    if [ "$?" = "0" ]; then
-        echo " $(date) | Mounting Chrome DMG"
-        hdiutil attach /tmp/googlechrome.dmg -nobrowse -quiet
-        sleep 3
-        echo " $(date) | Installing Chrome"
-        cp -R "/Volumes/Google Chrome/Google Chrome.app" /Applications/
-        hdiutil detach "/Volumes/Google Chrome" -quiet
-        rm /tmp/googlechrome.dmg
-        echo " $(date) | Google Chrome installed successfully"
-    else
-        echo " $(date) | Failed to download Google Chrome"
-    fi
-else
-    echo " $(date) | Google Chrome already installed, skipping"
+# Fetch the latest worker. If the download fails, exit non-zero so Intune retries next cycle.
+if ! /usr/bin/curl -fsSL --connect-timeout 30 --max-time 120 -o "$worker" "$workerurl"; then
+    echo "# $(date) | Failed to download worker, will retry next cycle" >> "$log"
+    exit 1
 fi
+/bin/chmod +x "$worker"
 
-## Install VLC
-if [ ! -d "/Applications/VLC.app" ]; then
-    echo " $(date) | Getting latest VLC version"
-    VLC_VERSION=$(curl -s "https://api.github.com/repos/videolan/vlc/tags" | grep -o '"name": "[0-9.]*"' | head -1 | grep -o '[0-9.]*')
-    echo " $(date) | Latest VLC version: $VLC_VERSION"
-    echo " $(date) | Downloading VLC"
-    curl -L --connect-timeout 30 --max-time 300 -o /tmp/vlc.dmg "https://get.videolan.org/vlc/$VLC_VERSION/macosx/vlc-$VLC_VERSION-arm64.dmg"
-    if [ "$?" = "0" ]; then
-        echo " $(date) | Mounting VLC DMG"
-        hdiutil attach /tmp/vlc.dmg -nobrowse
-        sleep 5
-        VLC_VOLUME="/Volumes/VLC media player"
-        echo " $(date) | VLC volume set to $VLC_VOLUME"
-        if [ -d "$VLC_VOLUME" ]; then
-            cp -R "$VLC_VOLUME/VLC.app" /Applications/
-            hdiutil detach "$VLC_VOLUME" -quiet
-            rm /tmp/vlc.dmg
-            echo " $(date) | VLC installed successfully"
-        else
-            echo " $(date) | Failed to find VLC volume at $VLC_VOLUME"
-            exit 1
-        fi
-    else
-        echo " $(date) | Failed to download VLC"
-    fi
-else
-    echo " $(date) | VLC already installed, skipping"
-fi
-
-## Install Google Drive
-if [ ! -d "/Applications/Google Drive.app" ]; then
-    echo " $(date) | Downloading Google Drive"
-    curl -L --connect-timeout 30 --max-time 300 -o /tmp/googledrive.dmg "https://dl.google.com/drive-file-stream/GoogleDrive.dmg"
-    if [ "$?" = "0" ]; then
-        echo " $(date) | Mounting Google Drive DMG"
-        hdiutil attach /tmp/googledrive.dmg -nobrowse -quiet
-        sleep 3
-        echo " $(date) | Installing Google Drive"
-        installer -pkg "/Volumes/Install Google Drive/GoogleDrive.pkg" -target /
-        hdiutil detach "/Volumes/Install Google Drive" -quiet
-        rm /tmp/googledrive.dmg
-        echo " $(date) | Google Drive installed successfully"
-    else
-        echo " $(date) | Failed to download Google Drive"
-    fi
-else
-    echo " $(date) | Google Drive already installed, skipping"
-fi
-
-## Install Rosetta
-if /usr/bin/pgrep -q oahd; then
-    echo " $(date) | Rosetta already installed, skipping"
-else
-    echo " $(date) | Installing Rosetta"
-    softwareupdate --install-rosetta --agree-to-license
-    if [ "$?" = "0" ]; then
-        echo " $(date) | Rosetta installed successfully"
-    else
-        echo " $(date) | Failed to install Rosetta"
-    fi
-fi
-
-## Install Zoom
-if [ ! -d "/Applications/zoom.us.app" ]; then
-    echo " $(date) | Downloading Zoom"
-    curl -L --connect-timeout 30 --max-time 300 -o /tmp/zoom.pkg "https://zoom.us/client/latest/ZoomInstallerIT.pkg"
-    if [ "$?" = "0" ]; then
-        echo " $(date) | Installing Zoom"
-        installer -pkg /tmp/zoom.pkg -target /
-        rm /tmp/zoom.pkg
-        echo " $(date) | Zoom installed successfully"
-    else
-        echo " $(date) | Failed to download Zoom"
-    fi
-else
-    echo " $(date) | Zoom already installed, skipping"
-fi
-
-## Create Classview app
-if [ ! -d "/Applications/Classview.app" ]; then
-    echo " $(date) | Creating Classview app"
-    mkdir -p "/Applications/Classview.app/Contents/MacOS"
-    mkdir -p "/Applications/Classview.app/Contents/Resources"
-
-    # Create the launcher script
-    cat > "/Applications/Classview.app/Contents/MacOS/Classview" << 'EOF'
-#!/bin/bash
-open -a "Google Chrome" "https://rangiora.classview.co.nz"
-EOF
-    chmod +x "/Applications/Classview.app/Contents/MacOS/Classview"
-
-    # Download favicon and convert to icns
-    echo " $(date) | Downloading Classview favicon"
-    ICON_DOWNLOADED=false
-    for FAVICON_URL in \
-        "https://rangiora.classview.co.nz/favicon.png" \
-        "https://rangiora.classview.co.nz/apple-touch-icon.png" \
-        "https://rangiora.classview.co.nz/apple-touch-icon-precomposed.png"; do
-        echo " $(date) | Trying $FAVICON_URL"
-        curl -L --silent --fail -o /tmp/classview_favicon.png "$FAVICON_URL"
-        if [ "$?" = "0" ] && sips -g pixelWidth /tmp/classview_favicon.png &>/dev/null; then
-            echo " $(date) | Successfully downloaded icon from $FAVICON_URL"
-            ICON_DOWNLOADED=true
-            break
-        fi
-    done
-
-    if [ "$ICON_DOWNLOADED" = "true" ]; then
-        mkdir -p /tmp/classview.iconset
-        sips -z 16 16     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_16x16.png
-        sips -z 32 32     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_16x16@2x.png
-        sips -z 32 32     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_32x32.png
-        sips -z 64 64     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_32x32@2x.png
-        sips -z 128 128   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_128x128.png
-        sips -z 256 256   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_128x128@2x.png
-        sips -z 256 256   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_256x256.png
-        sips -z 512 512   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_256x256@2x.png
-        sips -z 512 512   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_512x512.png
-        iconutil -c icns /tmp/classview.iconset -o "/Applications/Classview.app/Contents/Resources/AppIcon.icns"
-        rm -rf /tmp/classview.iconset /tmp/classview_favicon.png
-        echo " $(date) | Classview icon set successfully"
-    else
-        echo " $(date) | Could not download a valid favicon, app will use generic icon"
-    fi
-
-    # Create Info.plist
-    cat > "/Applications/Classview.app/Contents/Info.plist" << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>Classview</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIdentifier</key>
-    <string>nz.co.classview.rangiora</string>
-    <key>CFBundleName</key>
-    <string>Classview</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
-</dict>
-</plist>
-EOF
-    echo " $(date) | Classview app created successfully"
-else
-    echo " $(date) | Classview already installed, skipping"
-fi
-
-## Install Homebrew
-if [ -f "/opt/homebrew/bin/brew" ] || [ -f "/usr/local/bin/brew" ]; then
-    echo " $(date) | Homebrew already installed, skipping"
-else
-    echo " $(date) | Installing Homebrew as itadmin"
-    export NONINTERACTIVE=1
-    export HOME=/Users/itadmin
-    sudo -u "itadmin" --preserve-env=NONINTERACTIVE,HOME /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    if [ "$?" = "0" ]; then
-        echo " $(date) | Homebrew installed successfully"
-    else
-        echo " $(date) | Failed to install Homebrew"
-    fi
-fi
-
-echo " $(date) | App installation script complete"
+echo "# $(date) | Launching detached worker" >> "$log"
+# setsid via perl: new session -> reparents to launchd -> survives the agent's ~10s kill
+/usr/bin/nohup /usr/bin/perl -e 'use POSIX qw(setsid); setsid(); exec("/bin/bash", $ARGV[0])' "$worker" >/dev/null 2>&1 &
+disown
 exit 0

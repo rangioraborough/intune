@@ -6,38 +6,30 @@ InstallApps retry storm. We patched Dee's device but the underlying issues remai
 
 ---
 
-## 1. InstallApps.sh — reorder Rosetta to run first
+## 1. InstallApps.sh — reorder Rosetta to run first — ✅ DONE 2026-06-15
 
 [scripts/macOS/InstallApps.sh](scripts/macOS/InstallApps.sh)
 
-Rosetta install is currently step 5 (after Chrome 252 MB, VLC, Google Drive). If anything
-kills the script during the heavy downloads — for example, the Intune daemon being busy with
-another failing PKG policy — Rosetta never installs, which breaks anything that needs it
-(e.g. the Apeos PS Plug-in PKG).
+Rosetta now runs **first**, before the Chrome download. It's gated on `hw.optional.arm64`
+(Intel Macs skip cleanly) and verified via `pgrep oahd` after install rather than trusting
+`softwareupdate`'s exit code.
 
-**Action:** move the Rosetta block (currently lines ~98–108) to the very top of the script,
-before the Chrome download. Cheap, fast, and unblocks everything else.
+Failure handling resolved at the same time: **best-effort + report failure**. Each app
+install failure increments an `errors` counter and the script continues; the script
+`exit 1`s at the end if any step failed (so Intune marks the policy Failed and retries,
+keeping partial failures visible). The old inconsistent VLC `exit 1` was removed.
 
-While we're there, also consider: should the script `exit 1` on the first non-skippable
-failure so Intune retries cleanly, rather than logging and continuing? Right now a Chrome
-download failure just gets logged and the script proceeds.
+Still needs to be pushed into Intune and validated on a device.
 
 ---
 
-## 2. Add a dedicated InstallRosetta.sh Intune shell script
+## 2. Add a dedicated InstallRosetta.sh Intune shell script — ❌ DROPPED 2026-06-15
 
-Even with reordering, a dedicated script is more robust because:
-- It runs independently of InstallApps' other failures
-- Intune can retry it on its own schedule
-- It's the only thing that gates the Apeos PKG, so it deserves its own policy slot
-
-**Action:** create `scripts/macOS/InstallRosetta.sh` (Apple Silicon check, oahd check,
-softwareupdate install, exit on failure), then add as a macOS Shell Script in Intune:
-- Run as signed-in user: **No**
-- Frequency: every 15 min, 3 retries
-- Assign to: macOS Staff group
-
-See [conversation notes — script template was provided].
+Decided against it. Intune script *ordering between policies* isn't controllable, so a
+separate Rosetta policy buys nothing — nothing in InstallApps needs Rosetta anyway, and the
+only real consumer (the Apeos PKG, a separate LOB app) converges on its own via Intune retry
+once Rosetta is present. Keeping Rosetta as the **first step of InstallApps.sh** (item #1)
+gives controllable internal order and one script to maintain.
 
 ---
 
@@ -129,11 +121,12 @@ happen at all is worth knowing.
 
 ---
 
-## 8. Minor cleanups noted in passing
+## 8. Minor cleanups noted in passing — ✅ DONE 2026-06-15
 
-- [scripts/macOS/InstallCompanyPortal.sh](scripts/macOS/InstallCompanyPortal.sh) — uncommitted,
-  appeared this session. Confirmed working (Company Portal installed on Dee's during sync).
-  Either commit it or decide it's no longer needed now that Intune is delivering Company
-  Portal directly via PKG policy (we saw it install via the daemon, not the script).
-- `InstallApps.sh` is also currently modified (uncommitted) — review the diff before pulling
-  in changes from item #1.
+Both scripts are now committed (commit `2c4c1b7`); working tree is clean.
+- [scripts/macOS/InstallCompanyPortal.sh](scripts/macOS/InstallCompanyPortal.sh) — committed.
+  Note: Intune is also delivering Company Portal directly via PKG policy (seen installing via
+  the daemon), so the script is belt-and-suspenders; revisit if it ever causes duplicate-install
+  noise.
+- `InstallApps.sh` — committed, then further hardened under item #1 (Rosetta-first + error
+  counter). Not yet committed: the item #1 changes are in the working tree awaiting commit.
