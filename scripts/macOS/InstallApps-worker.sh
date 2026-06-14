@@ -245,9 +245,11 @@ else
     echo " $(date) | Classview already installed, skipping"
 fi
 
-## Install Homebrew
+## Install Homebrew (as the itadmin admin account)
 if [ -f "/opt/homebrew/bin/brew" ] || [ -f "/usr/local/bin/brew" ]; then
     echo " $(date) | Homebrew already installed, skipping"
+elif ! /usr/bin/id itadmin &>/dev/null; then
+    echo " $(date) | itadmin account not present yet, skipping Homebrew (will retry next run)"
 else
     echo " $(date) | Installing Homebrew as itadmin"
     export NONINTERACTIVE=1
