@@ -260,6 +260,11 @@ else
 fi
 
 rm -f "$lock"
+
+# Remove the one-shot LaunchDaemon plist so we don't re-run at every boot. Removing the file
+# does NOT kill this running job; the launcher re-creates + bootstraps it next time if needed.
+rm -f "/Library/LaunchDaemons/nz.school.rangiora.installapps-worker.plist"
+
 if [ "$errors" -gt 0 ]; then
     echo " $(date) | App installation worker complete with $errors failed step(s)"
     exit 1
