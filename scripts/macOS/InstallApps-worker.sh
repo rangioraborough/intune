@@ -245,24 +245,6 @@ else
     echo " $(date) | Classview already installed, skipping"
 fi
 
-## Install Homebrew (as the itadmin admin account)
-if [ -f "/opt/homebrew/bin/brew" ] || [ -f "/usr/local/bin/brew" ]; then
-    echo " $(date) | Homebrew already installed, skipping"
-elif ! /usr/bin/id itadmin &>/dev/null; then
-    echo " $(date) | itadmin account not present yet, skipping Homebrew (will retry next run)"
-else
-    echo " $(date) | Installing Homebrew as itadmin"
-    export NONINTERACTIVE=1
-    export HOME=/Users/itadmin
-    sudo -u "itadmin" --preserve-env=NONINTERACTIVE,HOME /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    if [ "$?" = "0" ]; then
-        echo " $(date) | Homebrew installed successfully"
-    else
-        echo " $(date) | Failed to install Homebrew"
-        errors=$((errors+1))
-    fi
-fi
-
 rm -f "$lock"
 
 # Remove the one-shot LaunchDaemon plist so we don't re-run at every boot. Removing the file
