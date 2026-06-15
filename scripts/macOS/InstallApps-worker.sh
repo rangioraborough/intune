@@ -172,55 +172,26 @@ else
     echo " $(date) | Zoom already installed, skipping"
 fi
 
-## Create Classview app
-if [ ! -d "/Applications/Classview.app" ]; then
+## Create / repair Classview app (Chrome web shortcut + bundled icon)
+## Icon is a prebuilt .icns in the repo (the site's favicon is an SVG that sips can't
+## rasterise). Fetched from GitHub, same as the Apeos PKG.
+CLASSVIEW_APP="/Applications/Classview.app"
+CLASSVIEW_ICNS_URL="https://raw.githubusercontent.com/rangioraborough/intune/main/assets/macOS/classview/Classview.icns"
+
+if [ ! -d "$CLASSVIEW_APP" ]; then
     echo " $(date) | Creating Classview app"
-    mkdir -p "/Applications/Classview.app/Contents/MacOS"
-    mkdir -p "/Applications/Classview.app/Contents/Resources"
+    mkdir -p "$CLASSVIEW_APP/Contents/MacOS"
+    mkdir -p "$CLASSVIEW_APP/Contents/Resources"
 
     # Create the launcher script
-    cat > "/Applications/Classview.app/Contents/MacOS/Classview" << 'EOF'
+    cat > "$CLASSVIEW_APP/Contents/MacOS/Classview" << 'EOF'
 #!/bin/bash
 open -a "Google Chrome" "https://rangiora.classview.co.nz"
 EOF
-    chmod +x "/Applications/Classview.app/Contents/MacOS/Classview"
-
-    # Download favicon and convert to icns
-    echo " $(date) | Downloading Classview favicon"
-    ICON_DOWNLOADED=false
-    for FAVICON_URL in \
-        "https://rangiora.classview.co.nz/favicon.png" \
-        "https://rangiora.classview.co.nz/apple-touch-icon.png" \
-        "https://rangiora.classview.co.nz/apple-touch-icon-precomposed.png"; do
-        echo " $(date) | Trying $FAVICON_URL"
-        curl -L --silent --fail -o /tmp/classview_favicon.png "$FAVICON_URL"
-        if [ "$?" = "0" ] && sips -g pixelWidth /tmp/classview_favicon.png &>/dev/null; then
-            echo " $(date) | Successfully downloaded icon from $FAVICON_URL"
-            ICON_DOWNLOADED=true
-            break
-        fi
-    done
-
-    if [ "$ICON_DOWNLOADED" = "true" ]; then
-        mkdir -p /tmp/classview.iconset
-        sips -z 16 16     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_16x16.png
-        sips -z 32 32     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_16x16@2x.png
-        sips -z 32 32     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_32x32.png
-        sips -z 64 64     /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_32x32@2x.png
-        sips -z 128 128   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_128x128.png
-        sips -z 256 256   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_128x128@2x.png
-        sips -z 256 256   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_256x256.png
-        sips -z 512 512   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_256x256@2x.png
-        sips -z 512 512   /tmp/classview_favicon.png --out /tmp/classview.iconset/icon_512x512.png
-        iconutil -c icns /tmp/classview.iconset -o "/Applications/Classview.app/Contents/Resources/AppIcon.icns"
-        rm -rf /tmp/classview.iconset /tmp/classview_favicon.png
-        echo " $(date) | Classview icon set successfully"
-    else
-        echo " $(date) | Could not download a valid favicon, app will use generic icon"
-    fi
+    chmod +x "$CLASSVIEW_APP/Contents/MacOS/Classview"
 
     # Create Info.plist
-    cat > "/Applications/Classview.app/Contents/Info.plist" << 'EOF'
+    cat > "$CLASSVIEW_APP/Contents/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -240,9 +211,22 @@ EOF
 </dict>
 </plist>
 EOF
-    echo " $(date) | Classview app created successfully"
+    echo " $(date) | Classview app created"
 else
-    echo " $(date) | Classview already installed, skipping"
+    echo " $(date) | Classview app already present"
+fi
+
+# Install the bundled icon if missing (also repairs devices created before this fix)
+if [ -d "$CLASSVIEW_APP" ] && [ ! -f "$CLASSVIEW_APP/Contents/Resources/AppIcon.icns" ]; then
+    echo " $(date) | Fetching Classview icon"
+    if curl -fsSL --connect-timeout 30 --max-time 60 -o "$CLASSVIEW_APP/Contents/Resources/AppIcon.icns" "$CLASSVIEW_ICNS_URL"; then
+        touch "$CLASSVIEW_APP"
+        /usr/bin/killall Dock 2>/dev/null
+        echo " $(date) | Classview icon installed"
+    else
+        echo " $(date) | Failed to fetch Classview icon, using generic icon"
+        errors=$((errors+1))
+    fi
 fi
 
 rm -f "$lock"
