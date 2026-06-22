@@ -55,7 +55,22 @@ DEFAULT_QUEUE="Ruru_Copier"
 
 for entry in "${QUEUES[@]}"; do
     IFS='|' read -r name uri desc <<< "$entry"
-    echo " $(date) | Adding queue '$name' -> $uri"
+
+    # Idempotency guard: re-running lpadmin -P re-applies the PPD and resets the
+    # queue's saved options, which wipes the per-printer "last used preset" that
+    # macOS remembers. So if the queue already exists with the correct device URI,
+    # leave it completely untouched - only (re)provision when missing or wrong.
+    existing_uri=$(lpstat -v "$name" 2>/dev/null | sed -n 's/^device for [^:]*: //p')
+    if [ "$existing_uri" = "$uri" ]; then
+        echo " $(date) |   $name already present and correct ($uri) - skipping"
+        continue
+    fi
+
+    if [ -n "$existing_uri" ]; then
+        echo " $(date) | Repairing queue '$name' (was '$existing_uri', want '$uri')"
+    else
+        echo " $(date) | Adding queue '$name' -> $uri"
+    fi
     lpadmin -p "$name" -E -v "$uri" -P "$PPD_TMP" -D "$desc" -o printer-is-shared=false
     rc=$?
     if [ "$rc" -eq 0 ]; then
