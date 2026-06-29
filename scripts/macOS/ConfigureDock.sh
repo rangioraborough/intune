@@ -11,10 +11,16 @@ logandmetadir="/Library/Logs/Microsoft/IntuneScripts/$appname"
 log="$logandmetadir/$appname.log"
 
 ## Bump this whenever the DockApps list changes to force a one-time re-apply.
-## The version is baked into the marker filename, so a new version won't match
+## The version is baked into the marker filenames, so a new version won't match
 ## the old marker and the dock gets rebuilt once before being handed back to the user.
-dockversion="1"
+dockversion="2"
 marker="$logandmetadir/$appname.v$dockversion.done"
+## Fingerprint of which listed apps were installed last time we (re)built the dock.
+## We only rebuild when this set changes (i.e. a new app from the list appeared),
+## then hand the dock back to the user. This means a single app that never installs
+## no longer blocks completion - the old "all apps present" gate reset the dock on
+## EVERY run whenever any app was missing, wiping the user's customisations.
+sigfile="$logandmetadir/$appname.v$dockversion.sig"
 
 if [ -d $logandmetadir ]; then
     echo "# $(date) | Log directory already exists - $logandmetadir"
@@ -30,13 +36,6 @@ echo "##############################################################"
 echo "# $(date) | Starting $appname"
 echo "##############################################################"
 echo ""
-
-## If we've already configured the dock once (with all apps present), leave it alone
-## so the user's own dock customisations are preserved on subsequent runs.
-if [ -f "$marker" ]; then
-    echo " $(date) | Dock already configured ($marker present) - leaving user's dock untouched"
-    exit 0
-fi
 
 ## Get logged in user
 LoggedInUser=$(stat -f "%Su" /dev/console)
@@ -61,13 +60,25 @@ declare -a DockApps=(
     "/System/Applications/System Settings.app"
 )
 
+## Fingerprint the set of listed apps currently installed. We only (re)build the
+## dock when this set changes from the last build - i.e. when a new app from the
+## list has finished installing. Once it stabilises the dock is handed to the user
+## and left alone, so an app that never installs no longer forces a reset each run.
+currentsig=""
+for app in "${DockApps[@]}"; do
+    [ -e "$app" ] && currentsig="${currentsig}${app}"$'\n'
+done
+
+if [ -f "$marker" ] && [ -f "$sigfile" ] && [ "$(cat "$sigfile")" = "$(printf '%s' "$currentsig")" ]; then
+    echo " $(date) | Dock already configured and no new apps installed since - leaving user's dock untouched"
+    exit 0
+fi
+
 ## Clear existing dock apps
 sudo -u "$LoggedInUser" defaults write com.apple.dock persistent-apps -array
 echo " $(date) | Cleared existing dock apps"
 
 ## Add apps to dock
-## Track whether every app was present so we only mark "done" once the dock is
-## fully built - apps deployed by Intune may not be installed yet on early runs.
 missing=0
 for app in "${DockApps[@]}"; do
     if [ -e "$app" ]; then
@@ -88,16 +99,18 @@ echo " $(date) | Disabled recent apps in dock"
 sudo -u "$LoggedInUser" killall Dock
 echo " $(date) | Dock restarted"
 
-## Only mark as done once every app was present, so later runs can still add
-## apps that hadn't finished installing yet. Once done, the dock is handed over
-## to the user and won't be reconfigured again.
+## Record the set of apps we just built the dock from. On the next run, if no new
+## listed app has appeared, the fingerprint matches and we leave the dock alone -
+## handing it to the user. If another app finishes installing later, the fingerprint
+## changes and we rebuild once more to include it. Either way, a perpetually-missing
+## app no longer triggers a reset on every run.
+rm -f "$logandmetadir/$appname".v*.done "$logandmetadir/$appname".v*.sig 2>/dev/null
+printf '%s' "$currentsig" > "$sigfile"
+touch "$marker"
 if [ "$missing" -eq 0 ]; then
-    ## Remove any older-version markers so they don't accumulate
-    rm -f "$logandmetadir/$appname".v*.done
-    touch "$marker"
-    echo " $(date) | All apps present - marking dock configuration complete ($marker)"
+    echo " $(date) | All apps present - dock built and handed to user"
 else
-    echo " $(date) | $missing app(s) not yet installed - will reconfigure on next run"
+    echo " $(date) | $missing app(s) not yet installed - dock built with what's present; will rebuild only if one appears later"
 fi
 
 echo " $(date) | Dock configuration complete"

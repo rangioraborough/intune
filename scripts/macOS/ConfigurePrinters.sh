@@ -60,9 +60,15 @@ for entry in "${QUEUES[@]}"; do
     # queue's saved options, which wipes the per-printer "last used preset" that
     # macOS remembers. So if the queue already exists with the correct device URI,
     # leave it completely untouched - only (re)provision when missing or wrong.
+    #
+    # Compare URIs with any trailing slash stripped: lpadmin is given e.g.
+    # "lpd://10.69.192.21/" but CUPS commonly reports it back via lpstat -v WITHOUT
+    # the trailing slash. A literal string compare therefore never matched, so the
+    # guard never fired and lpadmin re-ran every cycle - re-applying the PPD and
+    # wiping the last-used preset on every single Intune run.
     existing_uri=$(lpstat -v "$name" 2>/dev/null | sed -n 's/^device for [^:]*: //p')
-    if [ "$existing_uri" = "$uri" ]; then
-        echo " $(date) |   $name already present and correct ($uri) - skipping"
+    if [ "${existing_uri%/}" = "${uri%/}" ]; then
+        echo " $(date) |   $name already present and correct ($existing_uri) - skipping"
         continue
     fi
 
@@ -82,15 +88,41 @@ done
 
 rm -f "$PPD_TMP"
 
+## Set the default printer ONLY for users who don't already have one. The previous
+## version ran `lpoptions -d` for every user on every run, which forced the default
+## back to Ruru each Intune cycle and clobbered the user's own choice ("doesn't
+## remember last printer"). By only seeding a default when none is set, a teacher's
+## later choice of default printer is preserved.
+set_default_if_unset() {
+    local runas="$1"   # empty = current (root) context
+    local current
+    if [ -n "$runas" ]; then
+        current=$(sudo -u "$runas" lpstat -d 2>/dev/null)
+    else
+        current=$(lpstat -d 2>/dev/null)
+    fi
+    # lpstat -d prints "no system default destination" when none is set.
+    if printf '%s' "$current" | grep -q ':'; then
+        return 0  # already has a default - leave it alone
+    fi
+    if [ -n "$runas" ]; then
+        sudo -u "$runas" lpoptions -d "$DEFAULT_QUEUE" &>/dev/null || true
+        echo " $(date) |   seeded default $DEFAULT_QUEUE for $runas (had none)"
+    else
+        lpoptions -d "$DEFAULT_QUEUE" &>/dev/null || true
+        echo " $(date) |   seeded system default $DEFAULT_QUEUE (had none)"
+    fi
+}
+
 if lpstat -p "$DEFAULT_QUEUE" &>/dev/null; then
-    lpoptions -d "$DEFAULT_QUEUE" &>/dev/null
+    set_default_if_unset ""
     for home in /Users/*; do
         [ -d "$home/Library" ] || continue
         user=$(basename "$home")
         case "$user" in Shared|Guest|"Deleted Users"|.localized) continue ;; esac
-        sudo -u "$user" lpoptions -d "$DEFAULT_QUEUE" &>/dev/null || true
+        set_default_if_unset "$user"
     done
-    echo " $(date) | Default queue set to $DEFAULT_QUEUE"
+    echo " $(date) | Default queue seeding complete (existing user defaults preserved)"
 fi
 
 ############################################################################################
