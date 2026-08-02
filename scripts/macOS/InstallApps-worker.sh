@@ -192,6 +192,18 @@ fi
 ## rasterise). Fetched from GitHub, same as the Apeos PKG.
 CLASSVIEW_APP="/Applications/Classview.app"
 CLASSVIEW_ICNS_URL="https://raw.githubusercontent.com/rangioraborough/intune/main/assets/macOS/classview/Classview.icns"
+## Bump whenever Classview.icns changes in the repo. The version is stamped next to the
+## installed icon; a mismatch re-downloads it, so devices that already have an old icon
+## get the new one instead of being skipped by the "file exists" check.
+## v2: the original artwork filled the whole 1024 canvas edge to edge, so the Dock drew it
+## noticeably larger than every neighbouring app. Rebuilt on Apple's grid (824x824 artwork
+## centred in a 1024 canvas) so it matches Mail, Calendar, System Settings, etc.
+## v3: v2 exposed a second fault in the original artwork - its rounded corners were opaque
+## WHITE, not transparent. Edge to edge that was invisible; inset it showed as a white
+## square behind the icon. The corners are now actually transparent.
+CLASSVIEW_ICON_VERSION="3"
+CLASSVIEW_ICNS="$CLASSVIEW_APP/Contents/Resources/AppIcon.icns"
+CLASSVIEW_ICON_STAMP="$CLASSVIEW_APP/Contents/Resources/AppIcon.version"
 
 if [ ! -d "$CLASSVIEW_APP" ]; then
     echo " $(date) | Creating Classview app"
@@ -231,15 +243,31 @@ else
     echo " $(date) | Classview app already present"
 fi
 
-# Install the bundled icon if missing (also repairs devices created before this fix)
-if [ -d "$CLASSVIEW_APP" ] && [ ! -f "$CLASSVIEW_APP/Contents/Resources/AppIcon.icns" ]; then
-    echo " $(date) | Fetching Classview icon"
-    if curl -fsSL --connect-timeout 30 --max-time 60 -o "$CLASSVIEW_APP/Contents/Resources/AppIcon.icns" "$CLASSVIEW_ICNS_URL"; then
-        touch "$CLASSVIEW_APP"
+# Install the bundled icon if it's missing or out of date (also repairs devices that were
+# built before the icon was added, and those still carrying an older version of it).
+if [ -d "$CLASSVIEW_APP" ] && { [ ! -f "$CLASSVIEW_ICNS" ] \
+    || [ "$(cat "$CLASSVIEW_ICON_STAMP" 2>/dev/null)" != "$CLASSVIEW_ICON_VERSION" ]; }; then
+    echo " $(date) | Fetching Classview icon (v$CLASSVIEW_ICON_VERSION)"
+    if curl -fsSL --connect-timeout 30 --max-time 60 -o "$CLASSVIEW_ICNS.new" "$CLASSVIEW_ICNS_URL"; then
+        mv -f "$CLASSVIEW_ICNS.new" "$CLASSVIEW_ICNS"
+        printf '%s' "$CLASSVIEW_ICON_VERSION" > "$CLASSVIEW_ICON_STAMP"
+
+        # Swapping the .icns is not enough on its own: Launch Services and the Dock both
+        # cache a rendered copy of the old icon, so the stale one keeps being drawn until
+        # the app is removed from the Dock and re-added by hand. Touch the bundle, force a
+        # Launch Services re-register, bin the icon caches, then restart Dock + Finder so
+        # the new icon shows up on its own.
+        touch "$CLASSVIEW_APP/Contents/Info.plist" "$CLASSVIEW_APP"
+        lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        [ -x "$lsregister" ] && "$lsregister" -f "$CLASSVIEW_APP"
+        rm -rf /Library/Caches/com.apple.iconservices.store
+        find /private/var/folders -maxdepth 4 -name 'com.apple.dock.iconcache' -delete 2>/dev/null
         /usr/bin/killall Dock 2>/dev/null
-        echo " $(date) | Classview icon installed"
+        /usr/bin/killall Finder 2>/dev/null
+        echo " $(date) | Classview icon installed (v$CLASSVIEW_ICON_VERSION) and icon caches flushed"
     else
-        echo " $(date) | Failed to fetch Classview icon, using generic icon"
+        rm -f "$CLASSVIEW_ICNS.new"
+        echo " $(date) | Failed to fetch Classview icon, leaving existing icon in place"
         errors=$((errors+1))
     fi
 fi
