@@ -34,8 +34,8 @@ echo ""
 
 errors=0
 
-## Install Rosetta (FIRST — the Apeos PS Plug-in PKG is Intel-only and will not install
-## without it)
+## Install Rosetta (FIRST — the Apeos PS Plug-in PKG ships Intel-only plugins, so on Apple
+## Silicon it will not install without it. No-op on the Intel fleet, which runs it natively.)
 if [ "$(/usr/sbin/sysctl -n hw.optional.arm64 2>/dev/null)" = "1" ]; then
     if /usr/bin/pgrep -q oahd; then
         echo " $(date) | Rosetta already installed, skipping"
@@ -56,11 +56,17 @@ fi
 
 ## Install Photocopier drivers (FUJIFILM Apeos PS Plug-in)
 ## Installed here rather than as an Intune LOB app so it runs strictly AFTER Rosetta in the
-## same worker. The PKG is Intel-only and fails without Rosetta; as a separate app policy
-## that failure caused the Intune retry storm. Gated on Rosetta being present.
+## same worker. The PKG's plugins are Intel-only; as a separate app policy that failure
+## caused the Intune retry storm.
+##   - Intel Mac: the PKG is native, no Rosetta involved — install unconditionally.
+##   - Apple Silicon: needs Rosetta, so gate on oahd (the translation daemon).
+## Do NOT gate on oahd alone: it only ever exists on Apple Silicon, so on Intel that gate
+## never opens and the drivers are never installed.
 if pkgutil --pkg-info com.fujifilm.fb.print.ps.apon.202104.installer &>/dev/null; then
     echo " $(date) | Photocopier drivers already installed, skipping"
-elif /usr/bin/pgrep -q oahd; then
+elif [ "$(/usr/bin/uname -m)" = "arm64" ] && ! /usr/bin/pgrep -q oahd; then
+    echo " $(date) | Rosetta not present yet, skipping Photocopier drivers this run"
+else
     echo " $(date) | Downloading Photocopier drivers"
     curl -L --connect-timeout 30 --max-time 300 -o /tmp/apeos-drivers.pkg "https://raw.githubusercontent.com/rangioraborough/intune/main/packages/FUJIFILM%20PS%20Plug-in%20Installer.pkg"
     if [ "$?" = "0" ]; then
@@ -77,8 +83,6 @@ elif /usr/bin/pgrep -q oahd; then
         echo " $(date) | Failed to download Photocopier drivers"
         errors=$((errors+1))
     fi
-else
-    echo " $(date) | Rosetta not present yet, skipping Photocopier drivers this run"
 fi
 
 ## Install Google Chrome
@@ -103,11 +107,22 @@ else
 fi
 
 ## Install VLC
+## VideoLAN publish separate arm64 / intel64 / universal disk images. Take the universal one
+## so a single worker serves both fleets — the previous hardcoded -arm64.dmg put an
+## arm64-only VLC.app on the Intel Macs, which cannot launch at all.
+## Self-heal first: a wrong-architecture VLC.app still satisfies the -d test below, so those
+## devices would never repair themselves.
+if [ -d "/Applications/VLC.app" ] && \
+   ! /usr/bin/file "/Applications/VLC.app/Contents/MacOS/VLC" 2>/dev/null | grep -q "$(/usr/bin/uname -m)"; then
+    echo " $(date) | Existing VLC is not $(/usr/bin/uname -m), removing so it reinstalls"
+    rm -rf "/Applications/VLC.app"
+fi
+
 if [ ! -d "/Applications/VLC.app" ]; then
-    echo " $(date) | Finding latest VLC (arm64)"
+    echo " $(date) | Finding latest VLC (universal)"
     # Use VideoLAN's own 'last' directory — the GitHub API tag scrape was unreliable
     # (rate-limited from the device, returned an empty version -> broken download URL).
-    VLC_DMG=$(curl -s --connect-timeout 30 "https://get.videolan.org/vlc/last/macosx/" | grep -oE 'vlc-[0-9.]+-arm64\.dmg' | head -1)
+    VLC_DMG=$(curl -s --connect-timeout 30 "https://get.videolan.org/vlc/last/macosx/" | grep -oE 'vlc-[0-9.]+-universal\.dmg' | head -1)
     echo " $(date) | Latest VLC dmg: ${VLC_DMG:-<none found>}"
     echo " $(date) | Downloading VLC"
     curl -L --connect-timeout 30 --max-time 300 -o /tmp/vlc.dmg "https://get.videolan.org/vlc/last/macosx/${VLC_DMG}"
