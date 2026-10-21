@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Example MacAgent config. Upload the <dict> contents to Intune as a Preference file:
+  Devices > macOS > Configuration > Create > Templates > Preference file,
+  Preference domain name: nz.co.myers.macagent
+
+  Check a copy before uploading:  macagent config --config example.plist
+-->
+<plist version="1.0">
+<dict>
+    <!-- Bump when you change anything, so the log shows which config each Mac is running. -->
+    <key>ConfigVersion</key>
+    <integer>1</integer>
+
+    <!-- Never treated as "the user" (device naming, per-user setup). -->
+    <key>ExcludedUsers</key>
+    <array>
+        <string>itadmin</string>
+    </array>
+
+    <key>DeviceName</key>
+    <dict>
+        <key>Enabled</key>
+        <true/>
+        <!-- {model} {user} {username} {serial}. {user} is the username with dots removed and capitalised. -->
+        <key>Template</key>
+        <string>{model}-{user}</string>
+        <!-- Optional: overrides or additions to the built-in model codes (MBA, MBP, MB, iMac, PRO, MINI, MS, VM). -->
+        <key>ModelCodes</key>
+        <dict/>
+    </dict>
+    <!-- Each user's Dock, built once at their first login with whatever is installed. Apps that
+         install later are slotted into place; anything the user changes is left alone. -->
+    <key>Dock</key>
+    <dict>
+        <key>Apps</key>
+        <array>
+            <string>/Applications/Google Chrome.app</string>
+            <string>/Applications/Google Drive.app</string>
+            <string>/System/Applications/Calendar.app</string>
+            <string>/Applications/Classview.app</string>
+            <string>/System/Applications/Mail.app</string>
+            <string>/Applications/Company Portal.app</string>
+            <string>/Applications/Microsoft Word.app</string>
+            <string>/Applications/Microsoft Excel.app</string>
+            <string>/Applications/Microsoft PowerPoint.app</string>
+            <string>/Applications/Classroom.app</string>
+            <string>/System/Applications/System Settings.app</string>
+        </array>
+        <key>ShowRecents</key>
+        <false/>
+    </dict>
+
+    <!-- Menu bar icon, shown to every user. HelpURL can be mailto:, https: or tel:.
+         Items are extra links; App opens the link in that app instead of the default browser. -->
+    <key>MenuBar</key>
+    <dict>
+        <key>HelpTitle</key>
+        <string>Contact IT</string>
+        <key>HelpURL</key>
+        <string>mailto:it@example.school.nz</string>
+        <key>Items</key>
+        <array>
+            <dict>
+                <key>Title</key>
+                <string>School portal</string>
+                <key>URL</key>
+                <string>https://www.example.school.nz</string>
+                <key>App</key>
+                <string>Google Chrome</string>
+                <key>Symbol</key>
+                <string>globe</string>
+            </dict>
+        </array>
+    </dict>
+
+    <!-- Per-user preferences. Each entry is one domain. Dictionary values are merged into what's
+         already there. Enforce: once (default, user can change later) or always (put back every run). -->
+    <key>Preferences</key>
+    <array>
+        <dict>
+            <key>Domain</key>
+            <string>com.apple.finder</string>
+            <key>Restart</key>
+            <string>Finder</string>
+            <key>Settings</key>
+            <dict>
+                <!-- New windows open the home folder -->
+                <key>NewWindowTarget</key>
+                <string>PfHm</string>
+                <!-- Desktop: show disks, external drives, removable media, servers -->
+                <key>ShowHardDrivesOnDesktop</key>
+                <true/>
+                <key>ShowExternalHardDrivesOnDesktop</key>
+                <true/>
+                <key>ShowRemovableMediaOnDesktop</key>
+                <true/>
+                <key>ShowMountedServersOnDesktop</key>
+                <true/>
+                <!-- Open folders in tabs, show status and path bars -->
+                <key>FinderSpawnTab</key>
+                <true/>
+                <key>ShowStatusBar</key>
+                <true/>
+                <key>ShowPathbar</key>
+                <true/>
+                <key>_FXShowPosixPathInTitle</key>
+                <false/>
+                <!-- List view by default -->
+                <key>FXPreferredViewStyle</key>
+                <string>Nlsv</string>
+                <key>StandardViewSettings</key>
+                <dict>
+                    <key>ListViewSettings</key>
+                    <dict>
+                        <key>columns</key>
+                        <dict>
+                            <key>dateModified</key>
+                            <dict><key>visible</key><true/><key>width</key><integer>181</integer></dict>
+                            <key>dateCreated</key>
+                            <dict><key>visible</key><false/></dict>
+                            <key>size</key>
+                            <dict><key>visible</key><true/><key>width</key><integer>97</integer></dict>
+                            <key>kind</key>
+                            <dict><key>visible</key><true/><key>width</key><integer>115</integer></dict>
+                            <key>version</key>
+                            <dict><key>visible</key><false/></dict>
+                            <key>comments</key>
+                            <dict><key>visible</key><false/></dict>
+                        </dict>
+                        <key>iconSize</key>
+                        <integer>16</integer>
+                        <key>textSize</key>
+                        <integer>13</integer>
+                        <key>useRelativeDates</key>
+                        <true/>
+                        <key>calculateAllSizes</key>
+                        <false/>
+                        <key>showIconPreview</key>
+                        <true/>
+                        <key>sortColumn</key>
+                        <string>name</string>
+                        <key>ascending</key>
+                        <true/>
+                    </dict>
+                </dict>
+                <!-- Desktop: stacks grouped by kind, 64px icons, 12pt labels on the right -->
+                <key>DesktopViewSettings</key>
+                <dict>
+                    <key>GroupBy</key>
+                    <string>Kind</string>
+                    <key>SortBy</key>
+                    <string>Kind</string>
+                    <key>IconSize</key>
+                    <integer>64</integer>
+                    <key>FontSize</key>
+                    <integer>12</integer>
+                    <key>LabelOnBottom</key>
+                    <false/>
+                    <key>ShowItemInfo</key>
+                    <true/>
+                    <key>ShowIconPreview</key>
+                    <true/>
+                </dict>
+                <key>ShowRecentTags</key>
+                <false/>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>

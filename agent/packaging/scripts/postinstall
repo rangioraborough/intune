@@ -1,0 +1,28 @@
+#!/bin/bash
+## Link the CLI, then start the daemon and (if someone is logged in) their session agent.
+## Other users' session agents start at their next login.
+[ "$3" = "/" ] || exit 0
+
+APP="/Library/Application Support/MacAgent/MacAgent.app"
+DAEMON="/Library/LaunchDaemons/nz.co.myers.macagent.daemon.plist"
+AGENT="/Library/LaunchAgents/nz.co.myers.macagent.session.plist"
+MENU="/Library/LaunchAgents/nz.co.myers.macagent.menu.plist"
+TRIGGER="/Library/Application Support/MacAgent/Trigger"
+
+/bin/mkdir -p /usr/local/bin /Library/Logs/MacAgent
+/bin/ln -sf "$APP/Contents/MacOS/macagent" /usr/local/bin/macagent
+/usr/sbin/chown root:wheel "$DAEMON" "$AGENT" "$MENU"
+/bin/chmod 644 "$DAEMON" "$AGENT" "$MENU"
+## Any user may drop a file here to ask for a run (the menu bar's Check now). Sticky, so users
+## can't touch each other's files. The daemon only ever starts a normal run from it.
+/bin/mkdir -p "$TRIGGER"
+/bin/chmod 1777 "$TRIGGER"
+
+/bin/launchctl bootstrap system "$DAEMON"
+
+uid=$(/usr/bin/stat -f %u /dev/console)
+if [ "$uid" -gt 0 ]; then
+    /bin/launchctl bootstrap "gui/$uid" "$AGENT"
+    /bin/launchctl bootstrap "gui/$uid" "$MENU"
+fi
+exit 0

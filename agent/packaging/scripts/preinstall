@@ -1,0 +1,12 @@
+#!/bin/bash
+## Stop the running jobs so the binary can be replaced cleanly on upgrade.
+[ "$3" = "/" ] || exit 0
+
+/bin/launchctl bootout system/nz.co.myers.macagent.daemon 2>/dev/null
+
+uid=$(/usr/bin/stat -f %u /dev/console)
+if [ "$uid" -gt 0 ]; then
+    /bin/launchctl bootout "gui/$uid/nz.co.myers.macagent.session" 2>/dev/null
+    /bin/launchctl bootout "gui/$uid/nz.co.myers.macagent.menu" 2>/dev/null
+fi
+exit 0

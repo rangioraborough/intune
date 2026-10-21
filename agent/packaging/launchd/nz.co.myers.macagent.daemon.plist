@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>nz.co.myers.macagent.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Application Support/MacAgent/MacAgent.app/Contents/MacOS/macagent</string>
+        <string>run</string>
+        <string>--scope</string>
+        <string>device</string>
+    </array>
+    <!-- Boot, every 4 hours, whenever Intune installs or changes a profile, and when a user
+         presses Check now in the menu bar (a file appears in Trigger). -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>14400</integer>
+    <key>WatchPaths</key>
+    <array>
+        <string>/Library/Managed Preferences</string>
+        <string>/Library/Application Support/MacAgent/Trigger</string>
+    </array>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    <!-- Crashes and anything printed outside the agent's own log. -->
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/MacAgent/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/MacAgent/launchd.log</string>
+</dict>
+</plist>

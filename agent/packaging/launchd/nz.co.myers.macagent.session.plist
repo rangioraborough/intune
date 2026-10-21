@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>nz.co.myers.macagent.session</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Application Support/MacAgent/MacAgent.app/Contents/MacOS/macagent</string>
+        <string>run</string>
+        <string>--scope</string>
+        <string>session</string>
+    </array>
+    <!-- Every login, for every user, inside their GUI session; again when an app lands in
+         /Applications (so the Dock picks it up), and every 4 hours for `always` settings. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>WatchPaths</key>
+    <array>
+        <string>/Applications</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>14400</integer>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+</dict>
+</plist>
