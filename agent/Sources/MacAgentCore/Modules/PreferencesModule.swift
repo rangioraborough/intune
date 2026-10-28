@@ -23,21 +23,22 @@ public struct PreferencesModule: Module {
 
         for entry in entries {
             let entryHash = ConfigHash.of(entry)
-            let appliedKey = "applied.\(entry.domain)"
+            let host = entry.currentHost ?? false
+            let appliedKey = "applied.\(host ? "byhost:" : "")\(entry.domain)"
             let alreadyApplied = data[appliedKey] == entryHash
             if entry.enforceMode == .once, alreadyApplied, !ctx.force { continue }
 
             var keys: [String] = []
             for key in entry.settings.keys.sorted() {
-                let current = ctx.prefs.value(key, domain: entry.domain)
+                let current = ctx.prefs.value(key, domain: entry.domain, currentHost: host)
                 let desired = PlistMerge.merge(entry.settings[key]!.foundationValue, into: current)
                 guard !PlistMerge.equal(current, desired) else { continue }
                 keys.append(key)
-                if !ctx.dryRun { ctx.prefs.set(key, desired, domain: entry.domain) }
+                if !ctx.dryRun { ctx.prefs.set(key, desired, domain: entry.domain, currentHost: host) }
             }
 
             if !keys.isEmpty {
-                if !ctx.dryRun, !ctx.prefs.synchronize(domain: entry.domain) {
+                if !ctx.dryRun, !ctx.prefs.synchronize(domain: entry.domain, currentHost: host) {
                     throw ModuleError("could not save \(entry.domain)")
                 }
                 let summary = "\(entry.domain) " + keys.joined(separator: " ")
@@ -48,7 +49,7 @@ public struct PreferencesModule: Module {
         }
 
         // Forget domains that have been removed from the config, so re-adding one applies it again.
-        let domains = Set(entries.map { "applied.\($0.domain)" })
+        let domains = Set(entries.map { "applied.\($0.currentHost ?? false ? "byhost:" : "")\($0.domain)" })
         for key in data.keys where key.hasPrefix("applied.") && !domains.contains(key) { data[key] = nil }
 
         if !ctx.dryRun {

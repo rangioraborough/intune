@@ -18,6 +18,12 @@ public protocol SystemInfo: Sendable {
     func consoleUser() -> String?
     func hardware() throws -> HardwareInfo
     func fileExists(_ path: String) -> Bool
+    /// The account's full name ("Kelly Taylor"), if it has one.
+    func fullName(of user: String) -> String?
+    /// An app's CFBundleShortVersionString.
+    func appVersion(_ path: String) -> String?
+    /// When an app bundle was last installed or changed on this Mac, e.g. by an installer.
+    func modified(_ path: String) -> Date?
 }
 
 public struct LiveSystemInfo: SystemInfo {
@@ -33,6 +39,24 @@ public struct LiveSystemInfo: SystemInfo {
 
     public func fileExists(_ path: String) -> Bool {
         FileManager.default.fileExists(atPath: path)
+    }
+
+    /// Uses the status-change time (ctime): installers keep the vendor's build dates as the
+    /// modification time, but can't backdate ctime, so this shows when the app actually landed.
+    public func modified(_ path: String) -> Date? {
+        var st = stat()
+        guard stat(path + "/Contents/Info.plist", &st) == 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(st.st_ctimespec.tv_sec))
+    }
+
+    public func appVersion(_ path: String) -> String? {
+        NSDictionary(contentsOfFile: path + "/Contents/Info.plist")?["CFBundleShortVersionString"] as? String
+    }
+
+    public func fullName(of user: String) -> String? {
+        let r = shell.run("/usr/bin/id", ["-F", user])
+        let name = r.trimmedOutput
+        return r.succeeded && !name.isEmpty && name != user ? name : nil
     }
 
     public func hardware() throws -> HardwareInfo {

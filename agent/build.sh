@@ -21,13 +21,12 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 
 DIST="dist"
 ROOT="$DIST/root"
-APP="$ROOT/Library/Application Support/MacAgent/MacAgent.app"
-MENU="$ROOT/Library/Application Support/MacAgent/MacAgent Menu.app"
+APP="$ROOT/Applications/MacAgent.app"
 PKG="$DIST/MacAgent-$VERSION.pkg"
 
 echo "==> MacAgent $VERSION"
 rm -rf "$DIST"
-mkdir -p "$APP/Contents/MacOS" "$MENU/Contents/MacOS" "$ROOT/Library/LaunchDaemons" "$ROOT/Library/LaunchAgents"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ROOT/Library/LaunchDaemons" "$ROOT/Library/LaunchAgents"
 
 echo "==> Testing"
 swift test --quiet
@@ -39,12 +38,14 @@ for arch in arm64 x86_64; do
 done
 lipo -create -output "$APP/Contents/MacOS/macagent" \
     .build/arm64/release/macagent .build/x86_64/release/macagent
-lipo -create -output "$MENU/Contents/MacOS/MacAgentMenu" \
+lipo -create -output "$APP/Contents/MacOS/MacAgentMenu" \
     .build/arm64/release/MacAgentMenu .build/x86_64/release/MacAgentMenu
-lipo -info "$APP/Contents/MacOS/macagent" "$MENU/Contents/MacOS/MacAgentMenu"
+lipo -info "$APP/Contents/MacOS/macagent" "$APP/Contents/MacOS/MacAgentMenu"
 
 sed "s/__VERSION__/$VERSION/g" packaging/Info.plist > "$APP/Contents/Info.plist"
-sed "s/__VERSION__/$VERSION/g" packaging/Menu-Info.plist > "$MENU/Contents/Info.plist"
+cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"   # regenerate: swift packaging/make-icon.swift "$PWD/packaging/AppIcon.icns"
+cp vendor/Installomator.sh "$APP/Contents/Resources/Installomator.sh"
+chmod 755 "$APP/Contents/Resources/Installomator.sh"
 cp packaging/launchd/nz.co.myers.macagent.daemon.plist "$ROOT/Library/LaunchDaemons/"
 cp packaging/launchd/nz.co.myers.macagent.session.plist packaging/launchd/nz.co.myers.macagent.menu.plist \
     "$ROOT/Library/LaunchAgents/"
@@ -58,8 +59,9 @@ sign() {   # bundle, identifier
     fi
     codesign --verify --strict --verbose=1 "$1"
 }
+## The CLI is a second executable in Contents/MacOS: sign it first, then the bundle seals it in.
+sign "$APP/Contents/MacOS/macagent" "$BUNDLE_ID.cli"
 sign "$APP" "$BUNDLE_ID"
-sign "$MENU" "$BUNDLE_ID.menu"
 
 echo "==> Packaging"
 ## pkgbuild marks bundles relocatable by default: if a copy of MacAgent.app with the same bundle ID

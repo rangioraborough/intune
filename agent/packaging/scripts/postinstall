@@ -3,11 +3,14 @@
 ## Other users' session agents start at their next login.
 [ "$3" = "/" ] || exit 0
 
-APP="/Library/Application Support/MacAgent/MacAgent.app"
+APP="/Applications/MacAgent.app"
 DAEMON="/Library/LaunchDaemons/nz.co.myers.macagent.daemon.plist"
 AGENT="/Library/LaunchAgents/nz.co.myers.macagent.session.plist"
 MENU="/Library/LaunchAgents/nz.co.myers.macagent.menu.plist"
 TRIGGER="/Library/Application Support/MacAgent/Trigger"
+
+## 0.1.0 installed both apps under Application Support; they now live in /Applications.
+/bin/rm -rf "/Library/Application Support/MacAgent/MacAgent.app" "/Library/Application Support/MacAgent/MacAgent Menu.app"
 
 /bin/mkdir -p /usr/local/bin /Library/Logs/MacAgent
 /bin/ln -sf "$APP/Contents/MacOS/macagent" /usr/local/bin/macagent

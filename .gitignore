@@ -1,3 +1,6 @@
 .DS_Store
 agent/.build/
 agent/dist/
+site/dist/
+agent/config/rbs.plist
+site/*/private/

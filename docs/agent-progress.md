@@ -1,74 +1,104 @@
 # MacAgent: progress and next steps
 
-Last updated 2026-10-21. Design: [planv2.md](planv2.md). Code and usage: [agent/README.md](../agent/README.md).
+Last updated 2026-10-28. Design: [planv2.md](planv2.md). Code and usage: [agent/README.md](../agent/README.md).
 
 ## Decisions made
 
 | Topic | Decision |
 |---|---|
-| Delivery | Intune macOS app (PKG). No Intune scripts once migration is done |
+| Delivery | Intune macOS app (PKG): `MacAgent-<ver>.pkg`, plus a per-school `MacAgent Site - <SCHOOL>.pkg`. No Intune scripts once migration is done |
+| App | One `/Applications/MacAgent.app`: menu bar app, with the `macagent` CLI and Installomator inside |
 | Config | Intune Preference file, domain `nz.co.myers.macagent`. No GitHub at runtime |
-| Naming | `nz.co.myers.macagent` (universal, not school-specific), CLI `macagent` |
-| Site files (wallpaper, presets, avatars) | Separate per-school resources pkg (not built yet) |
-| Admin password | One universal password, stored in config as a PBKDF2 hash, never plain text |
+| Naming | `nz.co.myers.macagent` (universal, not school-specific) |
+| Site files | `site/<school>/files.txt` → `site/build-site.sh` → installs to `/Library/Application Support/MacAgent/Site` |
+| Admin password | One universal password, config holds a PBKDF2 hash; existing accounts are reset to it |
 | Reporting | Local only: `/Library/Logs/MacAgent/agent.log`, `~/Library/Logs/MacAgent/session.log`, `macagent status` |
 | Signing | Tony's Developer ID (team 25ZM6S7AH2). Installer cert still to be created |
 | Builds | `agent/build.sh` on this Mac (command line tools only, no Xcode) |
 | Device name | Template in config (`{model}-{user}`), locked to the first eligible user |
 | Dock | Built once per user with what's installed; late apps slotted in; user changes kept |
-| Existing users | Get Dock/Finder setup once at next login |
-| Finder | Generic `Preferences` module (domain → keys), not a Finder-specific one |
-| Old script leftovers | Archived/removed only after the replacing module has applied; `/Library/RBS` kept until wallpaper/avatar modules exist |
-| Menu bar | Shown to everyone. Status, Check now, help, custom links; printer details later |
+| Finder | Generic `Preferences` module (domain → keys) |
+| Apps | Installomator v10.9 (pinned, `agent/vendor/`), install if missing, never update |
+| Wallpaper / avatars | Once per user |
+| Default browser | macOS asks the user once; no answer means ask again next login |
+| Old script leftovers | Archived once each replacement has applied |
+| Menu bar | Shown to everyone. Menu: headline, Status…, links, help. Window: checks, Check again, Printer details, Copy diagnostics |
 
 ## Built and tested
 
-37 unit tests pass. Installed by hand on Annabelle's MacBook Air (`MBA-Annabellesimpson`,
-10.69.193.1, macOS 26.6, arm64), with the example config placed in the agent's fallback cache.
-Verified on the Mac, not just from logs:
+58 unit tests pass. 0.2.0 plus the RBS site package installed by hand on Annabelle's MacBook Air
+(`MBA-Annabellesimpson`, 10.69.193.1, macOS 26.6, arm64). Verified on the Mac, not just from logs:
 
-- `device-name`: name kept, locked to annabellesimpson
-- `dock`: all 11 apps in order, recents off
-- `preferences`: every Finder setting applied (these all failed under the old script)
-- `legacy-cleanup`: DeviceRename, ConfigureDock, ConfigureFinder archived to `/Library/Logs/MacAgent/legacy/`
-- Menu bar app running; Check now triggers a device run (throttled to one a minute, queued not dropped)
+- Dock (11 apps), Finder settings, device name: unchanged since 0.1.0, still correct
+- Wallpaper: points at the site copy (checked with `macagent desktop`)
+- Default browser: the macOS prompt appeared from the agent and was accepted; Chrome is default
+- Avatars: Annabelle and itadmin use the site images
+- Classview: rebuilt as the agent's web app, opens in Chrome
+- Printers, apps, Rosetta, Apeos driver, MAU: already in place, modules report ok
+- Old leftovers archived for every script except CreateAdminAccount; `/Library/RBS` and the old
+  Update Printer Details.app removed
+- Old Intune scripts ran again on 27 Oct and the agent flagged it as drift: they're still assigned
 
-**Not yet checked:** what the menu bar icon and menu look like on screen.
+Also installed on Kelly's Mac mini (`MacMini-KellyTaylor`, 10.69.193.8, macOS 27.0, arm64), a fresh
+enrollment with nothing from Intune yet: in about 2 minutes the agent installed Rosetta, the Apeos driver,
+Chrome, Drive, VLC, Zoom, built Classview, added the 4 copiers, set picture, wallpaper, Finder, Dock and
+presets. When Intune then installed Office, the Dock picked up Word/Excel/PowerPoint and MAU drift was
+fixed. Fixes from that test: the daemon now kickstarts the user's session run after device changes
+(WatchPaths on /Applications doesn't fire on macOS 27); an unanswered browser prompt waits 12h before
+asking again; names use the account's full name (`MacMini-KellyTaylor`) and Mac mini is `MacMini`.
+
+**Not yet checked:** the new menu and Status window on screen; Printer details… end to end;
+admin-account on a real Mac (needs the hash).
+
+## Admin account
+
+The real config is `agent/config/rbs.plist` (git-ignored; upload this one to Intune). It has the
+hash for the universal password; `example.plist` keeps a placeholder. The account is now `admin`
+(was `itadmin`); `AdminAccount.RemoveAccounts` deletes the old `itadmin`. Verified on Kelly's Mac:
+created, hidden, admin group, no Secure Token, real SSH login works with the password, picture set.
+Annabelle's Mac (offline at the time) still has the old blank-password `itadmin` until it gets this build.
 
 ## Open actions for Tony
 
-1. Look at the menu bar on Annabelle's Mac and note changes.
-2. In Intune, unassign ConfigureDock, ConfigureFinder and DeviceRename for her Mac. Their markers are
-   gone, so ConfigureDock would rebuild her Dock if it runs again (the agent logs this as drift).
-3. Decide on a Managed Login Items profile. Without it users can switch off the agent and menu in
-   System Settings → Login Items.
-4. Create a **Developer ID Installer** certificate; `build.sh` makes an unsigned pkg until then.
-5. Set up notarisation: `xcrun notarytool store-credentials macagent --apple-id … --team-id 25ZM6S7AH2`.
+1. (done) Admin password hash is in `rbs.plist`.
+2. Look at the menu and Status window on Annabelle's Mac; try Printer details….
+3. In Intune, unassign the old scripts for her Mac (all of them except CreateAdminAccount until the
+   hash is in). They ran again on 27 Oct.
+4. Decide on a Managed Login Items profile (stops users switching the agent off).
+5. Create a **Developer ID Installer** certificate; set up notarisation
+   (`xcrun notarytool store-credentials macagent --apple-id … --team-id 25ZM6S7AH2`).
 6. Replace the placeholder `MenuBar` help address and portal link in `agent/config/example.plist`.
 
-## Next modules, in order
+Notes from Kelly's Mac:
+- Intune took ~30 min after enrollment to send anything; then the Intune agent arrived, so **the old
+  scripts will run on new Macs too unless they're unassigned for them**.
+- Classroom isn't in the agent's app list (App Store app via Intune/VPP); Word/Excel/PowerPoint come from Intune.
+- Its time zone was US Pacific (Setup Assistant skipped location).
+- Company Portal removed from the config (no Conditional Access / compliance in use).
+- Annabelle's Mac still needs the new build to pick up `MBA-AnnabelleSimpson` (offline at the time).
 
-1. `admin-account` (device): universal password from a hash, plus `macagent hash-password`.
-   Fixes the blank-password `itadmin` account. The old CreateAdminAccount.sh still sets an empty password.
-2. `wallpaper` (session): no AppleScript. First check how macOS 26 stores wallpaper
-   (believed to be `~/Library/Application Support/com.apple.wallpaper/Store/Index.plist`).
-3. `apps` (device): Installomator bundled in the pkg, with signature checks.
-4. Per-school resources pkg, then `printer-queues`, `printer-presets`, and Update Printer Details in the menu bar.
-5. `avatar`, `default-browser`, `mau-disable`.
-6. Phase 1 checks still outstanding: Intune detects the pkg and upgrades it; a real Preference file
-   arrives and is readable; who can read `/Library/Managed Preferences`.
+## Next steps
+
+1. Test admin-account on Annabelle's Mac once the hash arrives (`dscl . -authonly itadmin` to verify).
+2. Phase 1 checks: upload both pkgs + a Preference file to Intune for a test group; confirm Intune
+   detects/upgrades the pkg, the profile arrives, and who can read `/Library/Managed Preferences`.
+3. Then roll out by group, unassigning each old script as its module takes over.
 
 ## Known loose ends
 
-- The Finder Desktop keys copied from the old script (`IconSize`, `FontSize`, `LabelOnBottom`, ...)
-  sit at the top level of `DesktopViewSettings`. Finder actually uses
-  `DesktopViewSettings.IconViewSettings`, so they probably have no visible effect. Fix when checking on screen.
+- Finder Desktop keys copied from the old script (`IconSize`, `FontSize`, ...) sit at the top level of
+  `DesktopViewSettings`; Finder uses `DesktopViewSettings.IconViewSettings`. Check on screen.
 - `chflags nohidden ~/Library` from ConfigureFinder isn't ported (not a preference).
 - `planv2.md` still says `com.rangiorab.macagent` and `desktoppicture.db`; this file and the README are current.
+- `/usr/bin/python3`, `strings` and other developer tools on school Macs are stubs: running them pops an
+  "install developer tools" dialog on the user's screen. Use only built-in tools (cat, grep, plutil, dscl).
+- Login Items: Microsoft Outlook / Teams / Corporation stay listed while the apps are installed; only
+  their switches matter. Microsoft Corporation (Intune agent + Office licensing) must stay on.
+- Teams opening at login after a sign-in: undecided (quit-at-login fallback, or wait for a sign-in sample).
 
 ## Testing on a Mac
 
-Install by hand: copy `agent/dist/MacAgent-<ver>.pkg` and a config plist over, then as root:
-put the config at `/Library/Application Support/MacAgent/config-cache.plist` (don't write into
-`/Library/Managed Preferences`, which Intune owns) and `installer -pkg … -target /`.
-Then `sudo macagent status`, and `cat /Library/Logs/MacAgent/agent.log`.
+Build: `agent/build.sh` (`APP_IDENTITY=-` for ad-hoc) and `site/build-site.sh rbs`. Copy both pkgs and
+a config plist over; as root put the config at `/Library/Application Support/MacAgent/config-cache.plist`
+(never write into `/Library/Managed Preferences`, which Intune owns), install the site pkg then the agent.
+Check with `sudo macagent status`, `macagent desktop`, and the logs.

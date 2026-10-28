@@ -35,7 +35,8 @@ public struct LegacyCleanupModule: Module {
         LegacyScript(name: "InstallCompanyPortal", replacedBy: "apps"),
         LegacyScript(name: "DisableMAU", replacedBy: "mau-disable"),
         LegacyScript(name: "CreateAdminAccount", replacedBy: "admin-account"),
-        LegacyScript(name: "ConfigurePrinters", replacedBy: "printer-queues"),
+        LegacyScript(name: "ConfigurePrinters", replacedBy: "printer-queues",
+                     extraPaths: ["/Applications/Update Printer Details.app"]),   // now in the MacAgent window
     ]
 
     static let scriptLogs = "/Library/Logs/Microsoft/IntuneScripts"

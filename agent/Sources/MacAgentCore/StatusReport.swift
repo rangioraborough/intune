@@ -30,6 +30,9 @@ public struct StatusReport: Equatable, Sendable {
         "avatar": "Account picture",
         "default-browser": "Default browser",
         "mau-disable": "Office updates",
+        "web-apps": "Web apps",
+        "login-items": "Background items",
+        "login-items-user": "Background items (yours)",
     ]
 
     public init(states: [ModuleState]) {

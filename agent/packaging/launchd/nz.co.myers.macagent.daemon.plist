@@ -6,7 +6,7 @@
     <string>nz.co.myers.macagent.daemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Library/Application Support/MacAgent/MacAgent.app/Contents/MacOS/macagent</string>
+        <string>/Applications/MacAgent.app/Contents/MacOS/macagent</string>
         <string>run</string>
         <string>--scope</string>
         <string>device</string>

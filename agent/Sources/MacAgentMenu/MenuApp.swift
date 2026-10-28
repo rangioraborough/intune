@@ -2,7 +2,8 @@ import AppKit
 import MacAgentCore
 import SwiftUI
 
-/// Menu bar app shown to every user: status at a glance, Check now, help, and links from config.
+/// /Applications/MacAgent.app: a menu bar icon for every user. The menu stays short (headline,
+/// Status…, links, help); the Status window holds the checks, Check again and printer details.
 @main
 struct MacAgentMenuApp: App {
     @StateObject private var model = StatusModel()
@@ -13,6 +14,11 @@ struct MacAgentMenuApp: App {
         } label: {
             Image(systemName: model.symbol)
         }
+
+        Window("MacAgent", id: "status") {
+            StatusWindow(model: model)
+        }
+        .windowResizability(.contentSize)
     }
 }
 
@@ -20,10 +26,10 @@ struct MacAgentMenuApp: App {
 final class StatusModel: ObservableObject {
     @Published private(set) var report = StatusReport(states: [])
     @Published private(set) var menu: MenuBarConfig?
+    @Published private(set) var printerDetailsAvailable = false
     @Published private(set) var checking = false
+    @Published var notice: String?
     private var timer: Timer?
-
-    nonisolated static let agent = "/Library/Application Support/MacAgent/MacAgent.app/Contents/MacOS/macagent"
 
     init() {
         refresh()
@@ -37,6 +43,7 @@ final class StatusModel: ObservableObject {
         if case .loaded(let config, _) = ConfigLoader(paths: .device()).load(updateCache: false) {
             menu = config.menuBar
         }
+        printerDetailsAvailable = PrinterDetails.presetsInstalled(prefs: UserPreferences())
     }
 
     var symbol: String {
@@ -59,7 +66,7 @@ final class StatusModel: ObservableObject {
         try? RunTrigger.request(user: NSUserName())
         Task.detached {
             let p = Process()
-            p.executableURL = URL(fileURLWithPath: Self.agent)
+            p.executableURL = URL(fileURLWithPath: AgentIdentity.cliPath)
             p.arguments = ["run", "--scope", "session"]
             try? p.run()
             p.waitUntilExit()
@@ -87,23 +94,28 @@ final class StatusModel: ObservableObject {
                                       user: NSUserName(), version: AgentVersion.current)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        notice = "Diagnostics copied. Paste them into your message to IT."
+    }
+
+    func savePrinterDetails(name: String, code: String) {
+        do {
+            let count = try PrinterDetails.apply(name: name, code: code, prefs: UserPreferences())
+            notice = "Printer details saved to \(count) preset\(count == 1 ? "" : "s")."
+        } catch {
+            notice = "Couldn't save printer details: \((error as? ModuleError)?.message ?? "\(error)")"
+        }
     }
 }
 
 struct MenuContent: View {
     @ObservedObject var model: StatusModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Text(model.report.headline)
-        Text(model.lastChecked)
-
-        if !model.report.rows.isEmpty {
-            Divider()
-            ForEach(model.report.rows, id: \.module) { row in
-                Menu("\(Self.mark(row.result))  \(row.title)") {
-                    Text(row.detail)
-                }
-            }
+        Button("Status…") {
+            openWindow(id: "status")
+            NSApp.activate(ignoringOtherApps: true)
         }
 
         if let items = model.menu?.items, !items.isEmpty {
@@ -116,23 +128,116 @@ struct MenuContent: View {
                 }
             }
         }
-
-        Divider()
-        Button(model.checking ? "Checking…" : "Check now") { model.checkNow() }
-            .disabled(model.checking)
         if let title = model.menu?.helpTitle, let url = model.menu?.helpURL {
+            Divider()
             Button(title) { model.open(url) }
         }
-        Button("Copy diagnostics") { model.copyDiagnostics() }
-        Divider()
-        Text("MacAgent \(AgentVersion.current)")
+    }
+}
+
+struct StatusWindow: View {
+    @ObservedObject var model: StatusModel
+    @State private var showPrinterDetails = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: model.symbol)
+                    .font(.title)
+                    .foregroundStyle(model.report.healthy ? Color.green : Color.orange)
+                VStack(alignment: .leading) {
+                    Text(model.report.headline).font(.headline)
+                    Text(model.lastChecked).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            if !model.report.rows.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(model.report.rows, id: \.module) { row in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: Self.symbol(row.result))
+                                .foregroundStyle(Self.colour(row.result))
+                                .frame(width: 16)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.title)
+                                Text(row.detail).font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+            }
+
+            if let notice = model.notice {
+                Text(notice).font(.callout).foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button(model.checking ? "Checking…" : "Check again") { model.checkNow() }
+                    .disabled(model.checking)
+                if model.printerDetailsAvailable {
+                    Button("Printer details…") { showPrinterDetails = true }
+                }
+                Spacer()
+                Button("Copy diagnostics") { model.copyDiagnostics() }
+            }
+            Text("MacAgent \(AgentVersion.current)").font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(20)
+        .frame(width: 440)
+        .onAppear { model.refresh() }
+        .sheet(isPresented: $showPrinterDetails) {
+            PrinterDetailsSheet { name, code in model.savePrinterDetails(name: name, code: code) }
+        }
     }
 
-    static func mark(_ result: RunResult) -> String {
-        switch result {
-        case .ok, .changed, .drift: return "✓"
-        case .waiting: return "…"
-        case .fail: return "⚠︎"
+    static func symbol(_ r: RunResult) -> String {
+        switch r {
+        case .ok, .changed, .drift: return "checkmark.circle.fill"
+        case .waiting: return "clock"
+        case .fail: return "exclamationmark.triangle.fill"
         }
+    }
+
+    static func colour(_ r: RunResult) -> Color {
+        switch r {
+        case .ok, .changed, .drift: return .green
+        case .waiting: return .secondary
+        case .fail: return .orange
+        }
+    }
+}
+
+struct PrinterDetailsSheet: View {
+    let save: (String, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var code = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Printer details").font(.headline)
+            Text("Used by the copiers for secure print and accounting. Leave a field empty to keep what's there.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("Name shown on the copier", text: $name)
+            TextField("Accounting code", text: $code)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    save(name.trimmingCharacters(in: .whitespaces), code.trimmingCharacters(in: .whitespaces))
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
+                          && code.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
     }
 }

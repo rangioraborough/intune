@@ -58,25 +58,47 @@ public indirect enum PlistValue: Codable, Equatable, Sendable {
 /// The current user's preferences. Session modules run as the user, so this goes through the user's
 /// own cfprefsd: no `sudo -u`, no `launchctl asuser`, no "Could not write domain".
 public protocol PreferencesStore: Sendable {
-    func value(_ key: String, domain: String) -> Any?
-    func set(_ key: String, _ value: Any?, domain: String)
+    /// `currentHost` is for ByHost preferences (`defaults -currentHost`), e.g. Control Center's menu bar items.
+    func value(_ key: String, domain: String, currentHost: Bool) -> Any?
+    func set(_ key: String, _ value: Any?, domain: String, currentHost: Bool)
+    /// Top-level keys the domain has for this user.
+    func keys(domain: String) -> [String]
     /// Flush to disk. False if cfprefsd refused the write.
-    func synchronize(domain: String) -> Bool
+    func synchronize(domain: String, currentHost: Bool) -> Bool
+}
+
+extension PreferencesStore {
+    public func value(_ key: String, domain: String) -> Any? { value(key, domain: domain, currentHost: false) }
+    public func set(_ key: String, _ value: Any?, domain: String) { set(key, value, domain: domain, currentHost: false) }
+    public func synchronize(domain: String) -> Bool { synchronize(domain: domain, currentHost: false) }
 }
 
 public struct UserPreferences: PreferencesStore {
     public init() {}
 
-    public func value(_ key: String, domain: String) -> Any? {
-        CFPreferencesCopyAppValue(key as CFString, domain as CFString)
+    /// "NSGlobalDomain" (or ".GlobalPreferences") means preferences shared by all apps.
+    static func cfDomain(_ domain: String) -> CFString {
+        domain == "NSGlobalDomain" || domain == ".GlobalPreferences" ? kCFPreferencesAnyApplication : domain as CFString
     }
 
-    public func set(_ key: String, _ value: Any?, domain: String) {
-        CFPreferencesSetAppValue(key as CFString, value as CFPropertyList?, domain as CFString)
+    static func host(_ currentHost: Bool) -> CFString { currentHost ? kCFPreferencesCurrentHost : kCFPreferencesAnyHost }
+
+    public func value(_ key: String, domain: String, currentHost: Bool) -> Any? {
+        CFPreferencesCopyValue(key as CFString, Self.cfDomain(domain), kCFPreferencesCurrentUser, Self.host(currentHost))
     }
 
-    public func synchronize(domain: String) -> Bool {
-        CFPreferencesAppSynchronize(domain as CFString)
+    public func set(_ key: String, _ value: Any?, domain: String, currentHost: Bool) {
+        CFPreferencesSetValue(key as CFString, value as CFPropertyList?, Self.cfDomain(domain),
+                              kCFPreferencesCurrentUser, Self.host(currentHost))
+    }
+
+    public func keys(domain: String) -> [String] {
+        (CFPreferencesCopyKeyList(domain as CFString, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+            as? [String]) ?? []
+    }
+
+    public func synchronize(domain: String, currentHost: Bool) -> Bool {
+        CFPreferencesSynchronize(Self.cfDomain(domain), kCFPreferencesCurrentUser, Self.host(currentHost))
     }
 }
 

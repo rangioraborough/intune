@@ -35,6 +35,8 @@ If the managed config is missing or invalid, the agent keeps using the last good
 | `sudo macagent run --scope device --dry-run` | what would change (as the user: `macagent run --scope session --dry-run`) |
 | `sudo macagent run --scope device [--module ID] [--force]` | run now |
 | `sudo macagent state reset [ID]` | forget a module so it re-applies (e.g. `device-name` to re-pick the user) |
+| `macagent desktop` | this user's wallpaper and default browser |
+| `macagent hash-password` | make the `AdminAccount.PasswordHash` value |
 | `/Library/Logs/MacAgent/agent.log` | device runs, one line per module per run, 14 days kept |
 | `~/Library/Logs/MacAgent/session.log` | that user's session runs |
 
@@ -48,23 +50,40 @@ login as that user.
 | `device-name` | device | always | DeviceRename.sh. Names the Mac from `DeviceName.Template`, locked to the first eligible user |
 | `preferences` | session | per entry | ConfigureFinder.sh, and any other per-user `defaults write`. `Preferences` lists domains → keys; `Enforce` once or always; optional `Restart` |
 | `dock` | session | module | ConfigureDock.sh. Built once per user from `Dock.Apps`; apps installed later are slotted in; user changes are kept |
+| `admin-account` | device | always | CreateAdminAccount.sh. Hidden admin with the password from `AdminAccount.PasswordHash` (`macagent hash-password`). Refuses to touch an account with a Secure Token |
+| `mau-disable` | device | always | DisableMAU.sh. Reports drift when an Office update puts AutoUpdate back |
+| `apps` | device | always | InstallApps*.sh, InstallCompanyPortal.sh. Rosetta, Installomator labels (install if missing, never update), site packages by receipt |
+| `web-apps` | device | always | Classview from InstallApps. Link apps in /Applications from `WebApps` |
+| `printer-queues` | device | always | ConfigurePrinters.sh step 1. Never re-runs lpadmin on a correct queue |
+| `avatar` | device | module | SetUserAvatar.sh. Once per user, including users who haven't logged in |
+| `wallpaper` | session | once | SetWallpaper.sh. Through NSWorkspace, no AppleScript |
+| `printer-presets` | session | once | ConfigurePrinters.sh step 2, plus the user's default printer if they have none |
+| `default-browser` | session | once | SetDefaultBrowser.sh. macOS asks the user; unanswered means ask again next login |
+| `legacy-cleanup` | device | module | Archives each old script's leftovers once its replacement has applied |
 
-Session modules don't run for `ExcludedUsers`. The session agent also re-runs when something is added
-to `/Applications`, so the Dock picks up new apps without waiting for the next login.
+Session modules don't run for `ExcludedUsers`. After any device run that changed something, the daemon
+kickstarts the logged-in user's session run, so e.g. the Dock picks up newly installed apps straight away.
+
+## Site resources
+
+Files a school's config refers to (wallpaper, avatars, icons, printer presets, driver packages) ship in
+a separate package so the agent stays identical everywhere. `site/<school>/files.txt` lists them;
+`site/build-site.sh rbs` builds `MacAgent Site - RBS-<ver>.pkg`, which installs to
+`/Library/Application Support/MacAgent/Site/`. Upload it to Intune as a second macOS app.
 
 ## Menu bar app
 
-`MacAgent Menu.app` runs for every user (LaunchAgent `nz.co.myers.macagent.menu`, restarted if quit).
-It shows:
+`/Applications/MacAgent.app` is the menu bar app (the `macagent` CLI is inside it, and Installomator in
+its Resources). LaunchAgent `nz.co.myers.macagent.menu` runs it for every user and restarts it if quit.
 
-- a headline ("This Mac is set up" / "1 thing needs attention") and when the Mac last checked
-- each area with ✓ / … / ⚠︎, with the detail in a submenu
-- links from `MenuBar.Items`, optionally opened in a specific app
-- **Check now**: runs the user's session modules straight away, and asks the daemon for a device run
-  by writing a file in `/Library/Application Support/MacAgent/Trigger` (sticky, world-writable;
-  launchd allows one run a minute, and a press inside that minute is queued, not dropped)
-- `MenuBar.HelpTitle` / `HelpURL` (mailto:, https:, tel:) and **Copy diagnostics**, which puts a status
-  summary on the clipboard for a support ticket
+The menu: headline, **Status…**, links from `MenuBar.Items` (optionally opened in a named app), and
+`MenuBar.HelpTitle`/`HelpURL`. The Status window lists each area with its detail, and has
+**Check again**, **Printer details…** (name and accounting code into the Apeos presets) and
+**Copy diagnostics**.
+
+Check again runs the user's session modules and asks the daemon for a device run by writing a file in
+`/Library/Application Support/MacAgent/Trigger` (sticky, world-writable; launchd allows one run a minute,
+and a press inside that minute is queued, not dropped).
 
 Users can switch off background items (the agent and the menu) in System Settings → General → Login
 Items. Only a Managed Login Items profile in Intune prevents that.

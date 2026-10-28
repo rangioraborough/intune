@@ -9,6 +9,8 @@ let usage = """
       macagent status
       macagent config [--config PLIST]       validate and print the config the agent would use
       macagent state reset [ID] [--scope device|session]
+      macagent hash-password                 make AdminAccount.PasswordHash for the Intune config
+      macagent desktop                       this user's wallpaper and default browser (run as the user)
       macagent version
 
     The device scope must run as root. launchd runs it at boot, every 4 hours and whenever the
@@ -115,12 +117,28 @@ case "run":
     do { state = try StateStore(url: p.stateDB) } catch { fail("\(error)", code: 1) }
     let runner = Runner(modules: ModuleRegistry.all, state: state, log: log, shell: shell,
                         system: LiveSystemInfo(shell: shell), paths: p)
-    let summary = runner.run(config: config, options: RunOptions(
-        scope: scope, subject: subject, only: args.flags["module"],
-        force: args.has("force"), dryRun: args.has("dry-run")))
+    let options = RunOptions(scope: scope, subject: subject, only: args.flags["module"],
+                             force: args.has("force"), dryRun: args.has("dry-run"))
+    let started = Date()
+    var summary = runner.run(config: config, options: options)
+    // The daemon kickstarts us after device changes, but launchd drops that if we're still running
+    // (e.g. waiting on the browser prompt). If the device changed something meanwhile, go once more.
+    if scope == .session, !options.dryRun,
+       let device = try? StateStore(url: Paths.device().stateDB, readOnly: true),
+       device.all().contains(where: { ($0.result == .changed || $0.result == .drift) && $0.lastRun > started }) {
+        summary = runner.run(config: config, options: options)
+    }
     if let only = args.flags["module"], summary.results.isEmpty,
        !ModuleRegistry.all.contains(where: { $0.id == only && $0.scope == scope }) {
         fail("no \(scope.rawValue) module called \(only)")
+    }
+    // Device work (new apps, printers...) can unblock session modules that were waiting, e.g. the
+    // Dock waiting for Chrome. Start the logged-in user's session run now rather than at next login.
+    if scope == .device, !args.has("dry-run"),
+       summary.results.values.contains(where: { $0 == .changed || $0 == .drift }),
+       let user = LiveSystemInfo(shell: shell).consoleUser(),
+       let uid = shell.run("/usr/bin/id", ["-u", user]).trimmedOutput.nonEmpty {
+        _ = shell.run("/bin/launchctl", ["kickstart", "gui/\(uid)/\(AgentIdentity.sessionLabel)"])
     }
     withExtendedLifetime(lock) {}
     exit(summary.failed ? 1 : 0)
@@ -180,6 +198,26 @@ case "state":
     } catch {
         fail("\(error)", code: 1)
     }
+
+case "hash-password":
+    func ask(_ prompt: String) -> String {
+        var buf = [CChar](repeating: 0, count: 1024)
+        guard let p = readpassphrase(prompt, &buf, buf.count, 0) else { fail("no terminal to read the password from") }
+        return String(cString: p)
+    }
+    let first = ask("New admin password: ")
+    guard first.count >= 8 else { fail("use at least 8 characters") }
+    if first.count < 12 {
+        FileHandle.standardError.write(Data("note: under 12 characters is easier to guess if the hash leaks\n".utf8))
+    }
+    guard ask("Again: ") == first else { fail("the two passwords didn't match") }
+    let hash = PasswordHash.make(password: first)
+    print("\nPaste this into AdminAccount > PasswordHash in the Intune config:\n\n\(hash.string)\n")
+
+case "desktop":
+    let desktop = LiveDesktop()
+    print("wallpaper:       \(desktop.wallpaper()?.path ?? "(unknown)")")
+    print("default browser: \(desktop.defaultBrowser()?.path ?? "(none)")")
 
 case "version", "--version":
     print(AgentVersion.current)

@@ -2,13 +2,16 @@ import Foundation
 
 public enum AgentVersion {
     /// Single source of truth for the agent version. build.sh reads this line.
-    public static let current = "0.1.0"
+    public static let current = "0.2.0"
 }
 
 public enum AgentIdentity {
     public static let bundleID = "nz.co.myers.macagent"
     public static let daemonLabel = "nz.co.myers.macagent.daemon"
     public static let sessionLabel = "nz.co.myers.macagent.session"
+    /// One app in /Applications: the menu bar app is its main executable; the CLI sits beside it.
+    public static let appPath = "/Applications/MacAgent.app"
+    public static let cliPath = appPath + "/Contents/MacOS/macagent"
 }
 
 /// Every filesystem location the agent touches. Injected so tests can point it at a temp dir.

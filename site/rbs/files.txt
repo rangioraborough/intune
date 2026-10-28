@@ -1,0 +1,12 @@
+# Files for the RBS site package, installed to /Library/Application Support/MacAgent/Site/.
+# <source, relative to the repo root>  ->  <name the config refers to>
+# assets/ and packages/ stay where they are until the old Intune scripts (which download them
+# from GitHub) are all retired.
+assets/macOS/backgrounds/RBS-Background_3888x2592.jpg  ->  wallpaper/RBS-Background.jpg
+assets/macOS/login-icons/teacher.png                   ->  avatars/teacher.png
+assets/macOS/login-icons/admin.png                     ->  avatars/admin.png
+assets/macOS/classview/Classview.icns                  ->  icons/Classview.icns
+packages/FUJIFILM PS Plug-in Installer.pkg             ->  drivers/FUJIFILM PS Plug-in Installer.pkg
+site/rbs/printers/com.apple.print.custompresets.plist  ->  printers/com.apple.print.custompresets.plist
+# Licensed files live in site/rbs/private/, which is git-ignored (never in the public repo).
+site/rbs/private/Microsoft_Office_LTSC_2021_VL_Serializer.pkg ->  office/Microsoft_Office_LTSC_2021_VL_Serializer.pkg

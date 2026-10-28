@@ -6,19 +6,16 @@
     <string>nz.co.myers.macagent.session</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Library/Application Support/MacAgent/MacAgent.app/Contents/MacOS/macagent</string>
+        <string>/Applications/MacAgent.app/Contents/MacOS/macagent</string>
         <string>run</string>
         <string>--scope</string>
         <string>session</string>
     </array>
-    <!-- Every login, for every user, inside their GUI session; again when an app lands in
-         /Applications (so the Dock picks it up), and every 4 hours for `always` settings. -->
+    <!-- Every login, for every user, inside their GUI session, and every 4 hours. The daemon also
+         kickstarts it after any device run that changed something (e.g. new apps for the Dock).
+         (WatchPaths on /Applications doesn't fire on macOS 27, so it isn't relied on.) -->
     <key>RunAtLoad</key>
     <true/>
-    <key>WatchPaths</key>
-    <array>
-        <string>/Applications</string>
-    </array>
     <key>StartInterval</key>
     <integer>14400</integer>
     <key>LimitLoadToSessionType</key>

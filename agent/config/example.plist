@@ -16,20 +16,186 @@
     <!-- Never treated as "the user" (device naming, per-user setup). -->
     <key>ExcludedUsers</key>
     <array>
-        <string>itadmin</string>
+        <string>admin</string>
     </array>
 
     <key>DeviceName</key>
     <dict>
         <key>Enabled</key>
         <true/>
-        <!-- {model} {user} {username} {serial}. {user} is the username with dots removed and capitalised. -->
+        <!-- {model} {user} {username} {serial}. {user} is the account's full name in CamelCase (KellyTaylor), or the username if it has none. -->
         <key>Template</key>
         <string>{model}-{user}</string>
-        <!-- Optional: overrides or additions to the built-in model codes (MBA, MBP, MB, iMac, PRO, MINI, MS, VM). -->
+        <!-- Optional: overrides or additions to the built-in model codes (MBA, MBP, MB, iMac, PRO, MacMini, MS, VM). -->
         <key>ModelCodes</key>
         <dict/>
     </dict>
+    <!-- The IT admin account (Hidden: true keeps it off the login window and Users & Groups). PasswordHash comes from `macagent hash-password`; the
+         plain-text password is never stored anywhere. The account is never treated as a user. -->
+    <key>AdminAccount</key>
+    <dict>
+        <key>Username</key>
+        <string>admin</string>
+        <key>FullName</key>
+        <string>Admin</string>
+        <key>Hidden</key>
+        <false/>
+        <key>PasswordHash</key>
+        <string>REPLACE-WITH-OUTPUT-OF-macagent-hash-password</string>
+        <!-- Old admin accounts to delete (never the logged-in user or one with a Secure Token). -->
+        <key>RemoveAccounts</key>
+        <array>
+            <string>itadmin</string>
+        </array>
+    </dict>
+
+    <!-- Installed if missing, never updated (apps update themselves). Labels are Installomator's. -->
+    <key>Apps</key>
+    <dict>
+        <key>Rosetta</key>
+        <true/>
+        <key>Install</key>
+        <array>
+            <dict><key>Label</key><string>googlechrome</string><key>Path</key><string>/Applications/Google Chrome.app</string></dict>
+            <dict><key>Label</key><string>googledrivefilestream</string><key>Path</key><string>/Applications/Google Drive.app</string></dict>
+            <dict><key>Label</key><string>vlc</string><key>Path</key><string>/Applications/VLC.app</string></dict>
+            <dict><key>Label</key><string>zoom</string><key>Path</key><string>/Applications/zoom.us.app</string></dict>
+        </array>
+        <!-- Never wanted: removed every run, e.g. when Microsoft's installers or Intune bring them. -->
+        <key>Remove</key>
+        <array>
+            <string>/Applications/OneDrive.app</string>
+            <string>/Applications/Microsoft Teams.app</string>
+        </array>
+        <!-- From the site resources package. File is relative to MacAgent/Site. -->
+        <key>Packages</key>
+        <array>
+            <dict>
+                <key>File</key>
+                <string>drivers/FUJIFILM PS Plug-in Installer.pkg</string>
+                <key>Receipt</key>
+                <string>com.fujifilm.fb.print.ps.apon.202104.installer</string>
+                <key>NeedsRosetta</key>
+                <true/>
+            </dict>
+            <!-- Office held at 16.113.4 (6 Oct 2026), the last release before Office LTSC 2021 support
+                 ended; later versions won't activate with the 2021 volume licence. Downloaded from
+                 Microsoft, checked against SHA256 and Microsoft's Team ID. If a Mac has any other
+                 version, the Office apps are removed and this one installed, but never while one is
+                 open. Needs Intune's Microsoft 365 apps assignment removed for these Macs, or the two
+                 will keep swapping versions. -->
+            <dict>
+                <key>URL</key>
+                <string>https://res.public.onecdn.static.microsoft/mro1cdnstorage/C1297A47-86C4-4C1F-97FA-950631F94777/MacAutoupdate/Microsoft_365_and_Office_16.113.26100421_Installer.pkg</string>
+                <key>SHA256</key>
+                <string>8212551ea19ce659caf2dc140cf77a26d0e3d8c1473a61e147a146e7711554b7</string>
+                <key>TeamID</key>
+                <string>UBF8T346G9</string>
+                <key>App</key>
+                <string>/Applications/Microsoft Word.app</string>
+                <key>Version</key>
+                <string>16.113.4</string>
+                <key>ReplaceApps</key>
+                <array>
+                    <string>/Applications/Microsoft Word.app</string>
+                    <string>/Applications/Microsoft Excel.app</string>
+                    <string>/Applications/Microsoft PowerPoint.app</string>
+                    <string>/Applications/Microsoft Outlook.app</string>
+                    <string>/Applications/Microsoft OneNote.app</string>
+                </array>
+            </dict>
+            <!-- Office volume licence: activates Office for every user without signing in. -->
+            <dict>
+                <key>File</key>
+                <string>office/Microsoft_Office_LTSC_2021_VL_Serializer.pkg</string>
+                <key>Receipt</key>
+                <string>com.microsoft.pkg.licensing.volume</string>
+            </dict>
+        </array>
+    </dict>
+
+    <!-- Web links shown as apps in /Applications. -->
+    <key>WebApps</key>
+    <array>
+        <dict>
+            <key>Name</key>
+            <string>Classview</string>
+            <key>URL</key>
+            <string>https://rangiora.classview.co.nz</string>
+            <key>Browser</key>
+            <string>Google Chrome</string>
+            <key>Icon</key>
+            <string>icons/Classview.icns</string>
+        </dict>
+    </array>
+
+    <!-- Copier queues. A queue already pointing at the right address is never touched. Default is
+         only set where the Mac or a user has no default yet. Presets are copied to each user once. -->
+    <key>Printers</key>
+    <dict>
+        <key>PPD</key>
+        <string>/Library/Printers/PPDs/Contents/Resources/FF Apeos C6570 PS.gz</string>
+        <key>Queues</key>
+        <array>
+            <dict><key>Name</key><string>Office_Copier</string><key>URI</key><string>lpd://10.69.192.21/</string><key>Description</key><string>Office Copier</string></dict>
+            <dict><key>Name</key><string>Ruru_Copier</string><key>URI</key><string>lpd://10.69.192.23/</string><key>Description</key><string>Ruru Copier</string></dict>
+            <dict><key>Name</key><string>Tui_Copier</string><key>URI</key><string>lpd://10.69.192.24/</string><key>Description</key><string>Tui Copier</string></dict>
+            <dict><key>Name</key><string>Nga_Rakau_e_Rua_Copier</string><key>URI</key><string>lpd://10.69.192.25/</string><key>Description</key><string>Nga Rakau e Rua Copier</string></dict>
+        </array>
+        <key>Default</key>
+        <string>Ruru_Copier</string>
+        <key>Presets</key>
+        <string>printers/com.apple.print.custompresets.plist</string>
+    </dict>
+
+    <!-- Set once per user; they can change them afterwards. Files are in the site resources. -->
+    <key>Wallpaper</key>
+    <dict>
+        <key>Image</key>
+        <string>wallpaper/RBS-Background.jpg</string>
+    </dict>
+    <key>Avatar</key>
+    <dict>
+        <key>Default</key>
+        <string>avatars/teacher.png</string>
+        <key>Users</key>
+        <dict>
+            <key>admin</key>
+            <string>avatars/admin.png</string>
+        </dict>
+    </dict>
+
+    <!-- Each user is asked once (macOS shows its own confirmation); their answer is kept. -->
+    <key>DefaultBrowser</key>
+    <dict>
+        <key>App</key>
+        <string>/Applications/Google Chrome.app</string>
+    </dict>
+
+    <key>MicrosoftAutoUpdate</key>
+    <dict>
+        <key>Disable</key>
+        <true/>
+    </dict>
+
+    <!-- Background items to switch off (System Settings > Login Items), by launchd label. Re-applied
+         every run, since Office/OneDrive updates put some back. Intune's agent, Office licensing and
+         the Entra sign-in broker are protected and can't be listed. Note: without its updaters,
+         OneDrive only updates when Intune deploys a newer version. -->
+    <key>LoginItems</key>
+    <dict>
+        <key>Disable</key>
+        <array>
+            <string>com.microsoft.autoupdate.helper</string>
+            <string>com.microsoft.update.agent</string>
+            <string>com.microsoft.OneDriveUpdaterDaemon</string>
+            <string>com.microsoft.OneDriveStandaloneUpdaterDaemon</string>
+            <string>com.microsoft.OneDriveStandaloneUpdater</string>
+            <string>com.microsoft.SyncReporter</string>
+            <string>com.microsoft.teams2.agent</string>
+        </array>
+    </dict>
+
     <!-- Each user's Dock, built once at their first login with whatever is installed. Apps that
          install later are slotted into place; anything the user changes is left alone. -->
     <key>Dock</key>
@@ -41,7 +207,6 @@
             <string>/System/Applications/Calendar.app</string>
             <string>/Applications/Classview.app</string>
             <string>/System/Applications/Mail.app</string>
-            <string>/Applications/Company Portal.app</string>
             <string>/Applications/Microsoft Word.app</string>
             <string>/Applications/Microsoft Excel.app</string>
             <string>/Applications/Microsoft PowerPoint.app</string>
@@ -52,25 +217,21 @@
         <false/>
     </dict>
 
-    <!-- Menu bar icon, shown to every user. HelpURL can be mailto:, https: or tel:.
-         Items are extra links; App opens the link in that app instead of the default browser. -->
+    <!-- Menu bar icon, shown to every user. Items are links; App opens the link in that app instead
+         of the default browser. Optional: HelpTitle + HelpURL (mailto:, https: or tel:) add a help item. -->
     <key>MenuBar</key>
     <dict>
-        <key>HelpTitle</key>
-        <string>Contact IT</string>
-        <key>HelpURL</key>
-        <string>mailto:it@example.school.nz</string>
         <key>Items</key>
         <array>
             <dict>
                 <key>Title</key>
-                <string>School portal</string>
+                <string>ICT Help</string>
                 <key>URL</key>
-                <string>https://www.example.school.nz</string>
+                <string>https://docs.google.com/spreadsheets/d/1ZLlKb1IcLQ2gca1sN9HOHuqrvSwZ8RAsA4gCnO_cQM8/edit?gid=0#gid=0</string>
                 <key>App</key>
                 <string>Google Chrome</string>
                 <key>Symbol</key>
-                <string>globe</string>
+                <string>questionmark.circle</string>
             </dict>
         </array>
     </dict>
@@ -79,6 +240,44 @@
          already there. Enforce: once (default, user can change later) or always (put back every run). -->
     <key>Preferences</key>
     <array>
+        <!-- Menu Bar > Fast User Switching: show it in the menu bar (Control Center item, a
+             ByHost setting) as the user's Full Name (userMenuExtraStyle 0; 1 = account name, 2 = icon). -->
+        <dict>
+            <key>Domain</key>
+            <string>com.apple.controlcenter</string>
+            <key>CurrentHost</key>
+            <true/>
+            <key>Restart</key>
+            <string>ControlCenter</string>
+            <key>Settings</key>
+            <dict>
+                <key>UserSwitcher</key>
+                <integer>2</integer>
+            </dict>
+        </dict>
+        <dict>
+            <key>Domain</key>
+            <string>NSGlobalDomain</string>
+            <key>Restart</key>
+            <string>ControlCenter</string>
+            <key>Settings</key>
+            <dict>
+                <key>userMenuExtraStyle</key>
+                <integer>0</integer>
+            </dict>
+        </dict>
+        <!-- Desktop & Dock > "Click wallpaper to reveal desktop": Only in Stage Manager (false) vs Always. -->
+        <dict>
+            <key>Domain</key>
+            <string>com.apple.WindowManager</string>
+            <key>Restart</key>
+            <string>WindowManager</string>
+            <key>Settings</key>
+            <dict>
+                <key>EnableStandardClickToShowDesktop</key>
+                <false/>
+            </dict>
+        </dict>
         <dict>
             <key>Domain</key>
             <string>com.apple.finder</string>
@@ -145,23 +344,30 @@
                         <true/>
                     </dict>
                 </dict>
-                <!-- Desktop: stacks grouped by kind, 64px icons, 12pt labels on the right -->
+                <!-- Desktop view options (View > Show View Options on the desktop): stacks by Kind,
+                     sorted by Kind, 64x64 icons, default grid spacing, 12pt labels on the right,
+                     item info and icon previews. Stacks are GroupBy; the rest lives in IconViewSettings. -->
                 <key>DesktopViewSettings</key>
                 <dict>
                     <key>GroupBy</key>
                     <string>Kind</string>
-                    <key>SortBy</key>
-                    <string>Kind</string>
-                    <key>IconSize</key>
-                    <integer>64</integer>
-                    <key>FontSize</key>
-                    <integer>12</integer>
-                    <key>LabelOnBottom</key>
-                    <false/>
-                    <key>ShowItemInfo</key>
-                    <true/>
-                    <key>ShowIconPreview</key>
-                    <true/>
+                    <key>IconViewSettings</key>
+                    <dict>
+                        <key>arrangeBy</key>
+                        <string>kind</string>
+                        <key>iconSize</key>
+                        <integer>64</integer>
+                        <key>gridSpacing</key>
+                        <integer>54</integer>
+                        <key>textSize</key>
+                        <integer>12</integer>
+                        <key>labelOnBottom</key>
+                        <false/>
+                        <key>showItemInfo</key>
+                        <true/>
+                        <key>showIconPreview</key>
+                        <true/>
+                    </dict>
                 </dict>
                 <key>ShowRecentTags</key>
                 <false/>

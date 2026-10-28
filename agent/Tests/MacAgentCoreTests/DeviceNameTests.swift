@@ -9,7 +9,7 @@ import Testing
         #expect(DeviceNameModule.modelCode(for: "MacBook Air", overrides: [:]) == "MBA")
         #expect(DeviceNameModule.modelCode(for: "MacBook Pro", overrides: [:]) == "MBP")
         #expect(DeviceNameModule.modelCode(for: "MacBook", overrides: [:]) == "MB")
-        #expect(DeviceNameModule.modelCode(for: "Mac mini", overrides: [:]) == "MINI")
+        #expect(DeviceNameModule.modelCode(for: "Mac mini", overrides: [:]) == "MacMini")
         #expect(DeviceNameModule.modelCode(for: "Mac Neo Thing", overrides: [:]) == "MacN")
         #expect(DeviceNameModule.modelCode(for: "MacBook Air", overrides: ["MacBook Air": "AIR"]) == "AIR")
     }
@@ -32,6 +32,16 @@ import Testing
         #expect(scutil.names["ComputerName"] == "MBA-Annabellesimpson")
         #expect(scutil.names["LocalHostName"] == "MBA-Annabellesimpson")
         #expect(scutil.names["HostName"] == "MBA-Annabellesimpson")
+    }
+
+    @Test func usesTheAccountsFullName() throws {
+        let scutil = FakeScutil([:])
+        var system = FakeSystem(user: "kellytaylor", hw: HardwareInfo(modelName: "Mac mini", serial: "X"))
+        system.fullNames = ["kellytaylor": "Kelly Taylor"]
+        let runner = try makeRunner(tempDir(), shell: scutil, system: system)
+        _ = runner.run(config: config, options: RunOptions(scope: .device, subject: "device"))
+        #expect(scutil.names["ComputerName"] == "MacMini-KellyTaylor")
+        #expect(scutil.names["LocalHostName"] == "MacMini-KellyTaylor")
     }
 
     @Test func locksToFirstUserOnSharedMac() throws {

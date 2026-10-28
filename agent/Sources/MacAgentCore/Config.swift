@@ -11,6 +11,15 @@ public struct AgentConfig: Codable, Equatable, Sendable {
     public var preferences: [PreferenceEntry]?
     public var legacyCleanup: LegacyCleanupConfig?
     public var menuBar: MenuBarConfig?
+    public var adminAccount: AdminAccountConfig?
+    public var wallpaper: WallpaperConfig?
+    public var avatar: AvatarConfig?
+    public var defaultBrowser: DefaultBrowserConfig?
+    public var microsoftAutoUpdate: MAUConfig?
+    public var apps: AppsConfig?
+    public var webApps: [WebAppConfig]?
+    public var printers: PrintersConfig?
+    public var loginItems: LoginItemsConfig?
 
     enum CodingKeys: String, CodingKey {
         case configVersion = "ConfigVersion"
@@ -20,20 +29,45 @@ public struct AgentConfig: Codable, Equatable, Sendable {
         case preferences = "Preferences"
         case legacyCleanup = "LegacyCleanup"
         case menuBar = "MenuBar"
+        case adminAccount = "AdminAccount"
+        case wallpaper = "Wallpaper"
+        case avatar = "Avatar"
+        case defaultBrowser = "DefaultBrowser"
+        case microsoftAutoUpdate = "MicrosoftAutoUpdate"
+        case apps = "Apps"
+        case webApps = "WebApps"
+        case printers = "Printers"
+        case loginItems = "LoginItems"
     }
 
     public init(configVersion: Int, excludedUsers: [String]? = nil, deviceName: DeviceNameConfig? = nil,
-                dock: DockConfig? = nil, preferences: [PreferenceEntry]? = nil) {
+                dock: DockConfig? = nil, preferences: [PreferenceEntry]? = nil,
+                adminAccount: AdminAccountConfig? = nil, wallpaper: WallpaperConfig? = nil,
+                avatar: AvatarConfig? = nil, defaultBrowser: DefaultBrowserConfig? = nil,
+                microsoftAutoUpdate: MAUConfig? = nil, apps: AppsConfig? = nil,
+                webApps: [WebAppConfig]? = nil, printers: PrintersConfig? = nil,
+                loginItems: LoginItemsConfig? = nil) {
         self.configVersion = configVersion
         self.excludedUsers = excludedUsers
         self.deviceName = deviceName
         self.dock = dock
         self.preferences = preferences
+        self.adminAccount = adminAccount
+        self.wallpaper = wallpaper
+        self.avatar = avatar
+        self.defaultBrowser = defaultBrowser
+        self.microsoftAutoUpdate = microsoftAutoUpdate
+        self.apps = apps
+        self.webApps = webApps
+        self.printers = printers
+        self.loginItems = loginItems
     }
 
-    /// System accounts that are never a real user, plus anything the config adds.
+    /// System accounts that are never a real user, the agent's own admin account, and anything the config adds.
     public var allExcludedUsers: Set<String> {
-        Set(["root", "loginwindow", "_mbsetupuser"]).union(excludedUsers ?? [])
+        var users = Set(["root", "loginwindow", "_mbsetupuser"]).union(excludedUsers ?? [])
+        if let admin = adminAccount?.username { users.insert(admin) }
+        return users
     }
 
     /// Checks that can't be expressed in the type. Returns human-readable problems.
@@ -43,11 +77,16 @@ public struct AgentConfig: Codable, Equatable, Sendable {
         if let dn = deviceName { problems += dn.validate().map { "DeviceName: \($0)" } }
         if let dock { problems += dock.validate().map { "Dock: \($0)" } }
         if let menuBar { problems += menuBar.validate().map { "MenuBar: \($0)" } }
+        if let adminAccount { problems += adminAccount.validate().map { "AdminAccount: \($0)" } }
+        if let apps { problems += apps.validate().map { "Apps: \($0)" } }
+        for (i, w) in (webApps ?? []).enumerated() { problems += w.validate().map { "WebApps[\(i)]: \($0)" } }
+        if let printers { problems += printers.validate().map { "Printers: \($0)" } }
+        if let loginItems { problems += loginItems.validate().map { "LoginItems: \($0)" } }
         if let preferences {
             for (i, entry) in preferences.enumerated() {
                 problems += entry.validate().map { "Preferences[\(i)]: \($0)" }
             }
-            let domains = preferences.map(\.domain)
+            let domains = preferences.map { ($0.currentHost ?? false ? "byhost:" : "") + $0.domain }
             for d in Set(domains) where domains.filter({ $0 == d }).count > 1 {
                 problems.append("Preferences: domain \(d) is listed more than once; put its settings in one entry")
             }
@@ -210,19 +249,24 @@ public struct PreferenceEntry: Codable, Equatable, Sendable {
     public var enforce: String?
     /// Process to restart after a change so it picks up the new values, e.g. "Finder".
     public var restart: String?
+    /// ByHost preferences (`defaults -currentHost`), e.g. com.apple.controlcenter menu bar items.
+    public var currentHost: Bool?
 
     enum CodingKeys: String, CodingKey {
         case domain = "Domain"
         case settings = "Settings"
         case enforce = "Enforce"
         case restart = "Restart"
+        case currentHost = "CurrentHost"
     }
 
-    public init(domain: String, settings: [String: PlistValue], enforce: String? = nil, restart: String? = nil) {
+    public init(domain: String, settings: [String: PlistValue], enforce: String? = nil, restart: String? = nil,
+                currentHost: Bool? = nil) {
         self.domain = domain
         self.settings = settings
         self.enforce = enforce
         self.restart = restart
+        self.currentHost = currentHost
     }
 
     public var enforceMode: Enforce { enforce == "always" ? .always : .once }
