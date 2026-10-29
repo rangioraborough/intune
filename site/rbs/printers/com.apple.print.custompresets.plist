@@ -59,7 +59,7 @@
 			<key>com.apple.print.PrintSettings.PMColorSpaceModel</key>
 			<integer>3</integer>
 			<key>com.apple.print.PrintSettings.PMDuplexing</key>
-			<integer>2</integer>
+			<integer>1</integer>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.AdvancedSettingRadioBtnTicketKey</key>
 			<string>0</string>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.BasicSettingRadioBtnTicketKey</key>
@@ -271,7 +271,7 @@
 			<key>com.apple.print.PrintSettings.PMColorSpaceModel</key>
 			<integer>3</integer>
 			<key>com.apple.print.PrintSettings.PMDuplexing</key>
-			<integer>2</integer>
+			<integer>1</integer>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.AdvancedSettingRadioBtnTicketKey</key>
 			<string>0</string>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.BasicSettingRadioBtnTicketKey</key>
@@ -483,7 +483,7 @@
 			<key>com.apple.print.PrintSettings.PMColorSpaceModel</key>
 			<integer>3</integer>
 			<key>com.apple.print.PrintSettings.PMDuplexing</key>
-			<integer>2</integer>
+			<integer>1</integer>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.JBAAccountIDFormatCheckboxReference</key>
 			<string>1</string>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.JBAAccountIDFormatCheckboxTicket</key>
@@ -689,7 +689,7 @@
 			<key>com.apple.print.PrintSettings.PMColorSpaceModel</key>
 			<integer>3</integer>
 			<key>com.apple.print.PrintSettings.PMDuplexing</key>
-			<integer>2</integer>
+			<integer>1</integer>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.AdvancedSettingRadioBtnTicketKey</key>
 			<string>0</string>
 			<key>com.fujifilm.fb.jt.printsettings.ps.ap.BasicSettingRadioBtnTicketKey</key>
@@ -887,11 +887,11 @@
 		<key>com.apple.print.preset.settings</key>
 		<dict>
 			<key>Duplex</key>
-			<string>DuplexNoTumble</string>
+			<string>None</string>
 			<key>DuplexBindingEdge</key>
 			<integer>2</integer>
 			<key>com.apple.print.PrintSettings.PMDuplexing</key>
-			<integer>2</integer>
+			<integer>1</integer>
 		</dict>
 	</dict>
 	<key>Last Used Settings</key>
@@ -903,11 +903,11 @@
 		<key>com.apple.print.preset.settings</key>
 		<dict>
 			<key>Duplex</key>
-			<string>DuplexNoTumble</string>
+			<string>None</string>
 			<key>DuplexBindingEdge</key>
 			<integer>2</integer>
 			<key>com.apple.print.PrintSettings.PMDuplexing</key>
-			<integer>2</integer>
+			<integer>1</integer>
 		</dict>
 	</dict>
 	<key>com.apple.print.customPresetsInfo</key>

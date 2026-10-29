@@ -10,11 +10,13 @@ public struct PrinterQueuesModule: Module {
 
     public init() {}
 
-    struct HashInput: Encodable { let ppd: String; let queues: [PrintersConfig.Queue]; let defaultQueue: String? }
+    struct HashInput: Encodable {
+        let ppd: String; let queues: [PrintersConfig.Queue]; let defaultQueue: String?; let options: [String: String]?
+    }
 
     public func configHash(_ config: AgentConfig) -> String? {
         guard let p = config.printers, !p.queues.isEmpty else { return nil }
-        return ConfigHash.of(HashInput(ppd: p.ppd, queues: p.queues, defaultQueue: p.defaultQueue))
+        return ConfigHash.of(HashInput(ppd: p.ppd, queues: p.queues, defaultQueue: p.defaultQueue, options: p.options))
     }
 
     public func run(_ ctx: ModuleContext, data: inout [String: String]) throws -> Outcome {
@@ -46,6 +48,18 @@ public struct PrinterQueuesModule: Module {
             changes += toAdd.map { "added \($0.name)" }
         }
 
+        // Queue defaults, e.g. Duplex=None. `lpoptions -l` marks the current default with *.
+        if let options = cfg.options, !options.isEmpty {
+            for q in cfg.queues where !toAdd.contains(where: { $0.name == q.name }) || !ctx.dryRun {
+                let listing = ctx.shell.run("/usr/bin/lpoptions", ["-p", q.name, "-l"]).stdout
+                for (option, value) in options.sorted(by: { $0.key < $1.key }) {
+                    guard Self.currentDefault(of: option, in: listing) != value else { continue }
+                    changes.append("\(q.name) \(option)=\(value)")
+                    if !ctx.dryRun { try ctx.shell.check("/usr/sbin/lpadmin", ["-p", q.name, "-o", "\(option)-default=\(value)"]) }
+                }
+            }
+        }
+
         if let def = cfg.defaultQueue, !ctx.shell.run("/usr/bin/lpstat", ["-d"]).stdout.contains(":") {
             changes.append("Mac default printer \(def)")
             if !ctx.dryRun { try ctx.shell.check("/usr/bin/lpoptions", ["-d", def]) }
@@ -54,6 +68,16 @@ public struct PrinterQueuesModule: Module {
     }
 
     static func trimSlash(_ s: String) -> String { s.hasSuffix("/") ? String(s.dropLast()) : s }
+
+    /// From `lpoptions -l` output like "Duplex/2-Sided Printing: *DuplexNoTumble None DuplexTumble".
+    static func currentDefault(of option: String, in listing: String) -> String? {
+        for line in listing.split(separator: "\n") {
+            let name = line.split(separator: ":").first.map { String($0.split(separator: "/").first ?? "") }
+            guard name == option else { continue }
+            return line.split(separator: " ").first(where: { $0.hasPrefix("*") }).map { String($0.dropFirst()) }
+        }
+        return nil
+    }
 
     /// lpadmin -P wants a plain PPD; drivers often install them gzipped.
     static func plainPPD(_ path: String, shell: CommandRunner) throws -> URL {

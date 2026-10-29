@@ -109,3 +109,29 @@ private func session(_ user: String = "annabellesimpson") -> RunOptions { RunOpt
         #expect((prefs.value(PrinterDetails.lastUsedKey, domain: perPrinter) as? [String: Any])?[PrinterDetails.keyPrefix + "JBAUserIDTextEditTicket"] as? String == "5678")
     }
 }
+
+@Suite struct OneSidedTests {
+    @Test func presetSettingsRewriteEveryPresetAndLastUsed() throws {
+        let prefs = FakePrefs()
+        let two: NSDictionary = [PrinterDetails.settingsKey: ["com.apple.print.PrintSettings.PMDuplexing": 2,
+                                                             PrinterDetails.keyPrefix + "JBAUserIDTextEditReference": "1234"]]
+        prefs.set("Colour", two, domain: PrinterDetails.presetsDomain)
+        prefs.set("B&W", two, domain: PrinterDetails.presetsDomain)
+        let pp = "com.apple.print.custompresets.forprinter.Ruru_Copier"
+        prefs.set(PrinterDetails.lastUsedKey, ["Duplex": "DuplexNoTumble"] as NSDictionary, domain: pp)
+        let n = try PrinterPresetsModule.applySettings(["com.apple.print.PrintSettings.PMDuplexing": .int(1), "Duplex": .string("None")],
+                                                       prefs: prefs, perPrinter: [pp], dryRun: false)
+        #expect(n == 3)
+        let colour = (prefs.value("Colour", domain: PrinterDetails.presetsDomain) as? [String: Any])?[PrinterDetails.settingsKey] as? [String: Any]
+        #expect(colour?["com.apple.print.PrintSettings.PMDuplexing"] as? Int == 1)
+        #expect(colour?[PrinterDetails.keyPrefix + "JBAUserIDTextEditReference"] as? String == "1234")   // teacher's code kept
+        #expect((prefs.value(PrinterDetails.lastUsedKey, domain: pp) as? [String: Any])?["Duplex"] as? String == "None")
+    }
+
+    @Test func readsQueueDefaultFromLpoptions() {
+        let listing = "PageSize/Media Size: Letter *A4\nDuplex/2-Sided Printing: *DuplexNoTumble None DuplexTumble\n"
+        #expect(PrinterQueuesModule.currentDefault(of: "Duplex", in: listing) == "DuplexNoTumble")
+        #expect(PrinterQueuesModule.currentDefault(of: "PageSize", in: listing) == "A4")
+        #expect(PrinterQueuesModule.currentDefault(of: "Nope", in: listing) == nil)
+    }
+}

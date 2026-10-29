@@ -146,6 +146,20 @@
         <string>Ruru_Copier</string>
         <key>Presets</key>
         <string>printers/com.apple.print.custompresets.plist</string>
+        <!-- One-sided by default: written into every preset each user has (keeps their name/code)... -->
+        <key>PresetSettings</key>
+        <dict>
+            <key>com.apple.print.PrintSettings.PMDuplexing</key>
+            <integer>1</integer>
+            <key>Duplex</key>
+            <string>None</string>
+        </dict>
+        <!-- ...and the copier queues' own default (the Apeos driver defaults to two-sided). -->
+        <key>Options</key>
+        <dict>
+            <key>Duplex</key>
+            <string>None</string>
+        </dict>
     </dict>
 
     <!-- Set once per user; they can change them afterwards. Files are in the site resources. -->

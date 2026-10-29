@@ -240,19 +240,29 @@ public struct PrintersConfig: Codable, Equatable, Sendable {
     public var defaultQueue: String?
     /// Preset plist in the site resources, copied into each user's com.apple.print.custompresets once.
     public var presets: String?
+    /// Settings written into every preset (and each printer's last-used settings) a user has, once
+    /// per change, e.g. one-sided: com.apple.print.PrintSettings.PMDuplexing = 1, Duplex = None.
+    public var presetSettings: [String: PlistValue]?
+    /// Queue defaults (PPD options), e.g. Duplex = None. Applied without re-adding the queue.
+    public var options: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case ppd = "PPD"
         case queues = "Queues"
         case defaultQueue = "Default"
         case presets = "Presets"
+        case presetSettings = "PresetSettings"
+        case options = "Options"
     }
 
-    public init(ppd: String, queues: [Queue], defaultQueue: String? = nil, presets: String? = nil) {
+    public init(ppd: String, queues: [Queue], defaultQueue: String? = nil, presets: String? = nil,
+                presetSettings: [String: PlistValue]? = nil, options: [String: String]? = nil) {
         self.ppd = ppd
         self.queues = queues
         self.defaultQueue = defaultQueue
         self.presets = presets
+        self.presetSettings = presetSettings
+        self.options = options
     }
 
     public struct Queue: Codable, Equatable, Sendable {
