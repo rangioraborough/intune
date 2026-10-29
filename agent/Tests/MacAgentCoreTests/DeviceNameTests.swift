@@ -79,6 +79,36 @@ import Testing
         #expect(scutil.names["ComputerName"] == "MBA-Annabellesimpson")
     }
 
+    @Test func bonjourClashKeepsSuffixAndRetriesDaily() throws {
+        let dir = tempDir()
+        let scutil = FakeScutil([:])
+        let runner = try makeRunner(dir, shell: scutil, system: FakeSystem(user: "annabellesimpson"))
+        _ = runner.run(config: config, options: RunOptions(scope: .device, subject: "device"))
+
+        // Another Mac has the name: Bonjour renames this one. The first time, try the real name again...
+        scutil.names["LocalHostName"] = "MBA-Annabellesimpson-2"
+        #expect(runner.run(config: config, options: RunOptions(scope: .device, subject: "device"))
+                    .results["device-name"] == .drift)
+        // ...Bonjour puts the suffix straight back, and now it's left alone until tomorrow.
+        scutil.names["LocalHostName"] = "MBA-Annabellesimpson-2"
+        #expect(runner.run(config: config, options: RunOptions(scope: .device, subject: "device"))
+                    .results["device-name"] == .ok)
+        #expect(scutil.names["LocalHostName"] == "MBA-Annabellesimpson-2")
+        // A real rename is still put back straight away.
+        scutil.names["LocalHostName"] = "Annabelles-MacBook"
+        #expect(runner.run(config: config, options: RunOptions(scope: .device, subject: "device"))
+                    .results["device-name"] == .drift)
+        #expect(scutil.names["LocalHostName"] == "MBA-Annabellesimpson")
+    }
+
+    @Test func bonjourSuffixDetection() {
+        #expect(DeviceNameModule.isBonjourSuffixed("MacMini-SueCollie-2", of: "MacMini-SueCollie"))
+        #expect(DeviceNameModule.isBonjourSuffixed("MacMini-SueCollie-12", of: "MacMini-SueCollie"))
+        #expect(!DeviceNameModule.isBonjourSuffixed("MacMini-SueCollie-Old", of: "MacMini-SueCollie"))
+        #expect(!DeviceNameModule.isBonjourSuffixed("MacMini-SueCollie-", of: "MacMini-SueCollie"))
+        #expect(!DeviceNameModule.isBonjourSuffixed("MacMini-Sue", of: "MacMini-SueCollie"))
+    }
+
     @Test func templateChangeIsChangedNotDrift() throws {
         let dir = tempDir()
         let scutil = FakeScutil([:])

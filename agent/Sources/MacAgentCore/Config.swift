@@ -20,6 +20,7 @@ public struct AgentConfig: Codable, Equatable, Sendable {
     public var webApps: [WebAppConfig]?
     public var printers: PrintersConfig?
     public var loginItems: LoginItemsConfig?
+    public var console: ConsoleConfig?
 
     enum CodingKeys: String, CodingKey {
         case configVersion = "ConfigVersion"
@@ -38,6 +39,7 @@ public struct AgentConfig: Codable, Equatable, Sendable {
         case webApps = "WebApps"
         case printers = "Printers"
         case loginItems = "LoginItems"
+        case console = "Console"
     }
 
     public init(configVersion: Int, excludedUsers: [String]? = nil, deviceName: DeviceNameConfig? = nil,
@@ -82,6 +84,7 @@ public struct AgentConfig: Codable, Equatable, Sendable {
         for (i, w) in (webApps ?? []).enumerated() { problems += w.validate().map { "WebApps[\(i)]: \($0)" } }
         if let printers { problems += printers.validate().map { "Printers: \($0)" } }
         if let loginItems { problems += loginItems.validate().map { "LoginItems: \($0)" } }
+        if let console { problems += console.validate().map { "Console: \($0)" } }
         if let preferences {
             for (i, entry) in preferences.enumerated() {
                 problems += entry.validate().map { "Preferences[\(i)]: \($0)" }

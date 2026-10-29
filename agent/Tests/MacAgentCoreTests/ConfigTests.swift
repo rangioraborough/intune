@@ -93,7 +93,8 @@ private func plist(_ body: String) -> Data {
         let report = StatusReport(states: [state("dock", .changed, 5), state("legacy-cleanup", .fail, 1),
                                            state("device-name", .fail, 10)])
         #expect(report.rows.map(\.title) == ["Computer name", "Dock"])
-        #expect(report.headline == "1 thing needs attention")
+        #expect(report.headline == "MacAgent \(AgentVersion.current) · 1 issue")
+        #expect(StatusReport(states: []).issueSummary == "Waiting for first check")
         #expect(abs(report.lastChecked!.timeIntervalSinceNow + 60) < 5)
     }
 

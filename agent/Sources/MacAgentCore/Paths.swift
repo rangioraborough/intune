@@ -2,7 +2,7 @@ import Foundation
 
 public enum AgentVersion {
     /// Single source of truth for the agent version. build.sh reads this line.
-    public static let current = "0.2.0"
+    public static let current = "0.3.3"
 }
 
 public enum AgentIdentity {

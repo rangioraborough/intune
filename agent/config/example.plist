@@ -210,6 +210,18 @@
         </array>
     </dict>
 
+    <!-- MacAgent Console on the IT iMac: Macs report here every 10 minutes and collect its signed
+         requests (Check now, re-apply a module). Copy this section from the console's Setup. -->
+    <key>Console</key>
+    <dict>
+        <key>URL</key>
+        <string>http://CONSOLE-IP:8730</string>
+        <key>FleetKey</key>
+        <string>FROM-CONSOLE-SETUP</string>
+        <key>PublicKey</key>
+        <string>FROM-CONSOLE-SETUP</string>
+    </dict>
+
     <!-- Each user's Dock, built once at their first login with whatever is installed. Apps that
          install later are slotted into place; anything the user changes is left alone. -->
     <key>Dock</key>

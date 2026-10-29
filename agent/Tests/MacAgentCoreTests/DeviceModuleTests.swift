@@ -314,6 +314,34 @@ private func device(force: Bool = false) -> RunOptions { RunOptions(scope: .devi
         #expect(shell.calls.contains("/usr/bin/lpoptions -d Ruru_Copier"))
     }
 
+    @Test func setsDefaultsInTheQueuesPPD() throws {
+        // printers.conf already says one-sided (lpoptions shows *None), but the queue's PPD,
+        // which the print dialog reads, still says two-sided: only the PPD is fixed.
+        let tmp = tempDir()
+        let driver = tmp.appendingPathComponent("apeos.ppd")
+        try Data("*PPD-Adobe: \"4.3\"\n".utf8).write(to: driver)
+        let ppdDir = tmp.appendingPathComponent("cups-ppd")
+        try FileManager.default.createDirectory(at: ppdDir, withIntermediateDirectories: true)
+        let queuePPD = ppdDir.appendingPathComponent("Ruru_Copier.ppd")
+        try Data("*PPD-Adobe: \"4.3\"\r\n*DefaultDuplex: DuplexNoTumble\r\n*Duplex None: \"\"\r\n".utf8).write(to: queuePPD)
+        let shell = ScriptedShell { cmd in
+            if cmd.hasPrefix("/usr/bin/lpstat -v") { return CommandResult(exitCode: 0, stdout: "device for Ruru_Copier: lpd://10.69.192.23\n") }
+            if cmd.hasPrefix("/usr/bin/lpoptions -p") { return CommandResult(exitCode: 0, stdout: "Duplex/2-Sided Printing: DuplexNoTumble *None DuplexTumble\n") }
+            if cmd == "/usr/bin/lpstat -d" { return CommandResult(exitCode: 0, stdout: "system default destination: Ruru_Copier\n") }
+            return CommandResult(exitCode: 0)
+        }
+        let config = AgentConfig(configVersion: 1, printers: PrintersConfig(ppd: driver.path, queues: [
+            .init(name: "Ruru_Copier", uri: "lpd://10.69.192.23/")], options: ["Duplex": "None"]))
+        let runner = try makeRunner(tmp, shell: shell, system: FakeSystem(files: [driver.path]),
+                                    modules: [PrinterQueuesModule(ppdDir: ppdDir)])
+        #expect(runner.run(config: config, options: device()).results["printer-queues"] == .changed)
+        let text = try String(contentsOf: queuePPD, encoding: .isoLatin1)
+        #expect(text.contains("*DefaultDuplex: None\r\n"))
+        #expect(text.contains("*Duplex None: \"\""))
+        #expect(!shell.calls.contains { $0.hasPrefix("/usr/sbin/lpadmin") })
+        #expect(runner.run(config: config, options: device()).results["printer-queues"] == .ok)
+    }
+
     @Test func waitsForDriver() throws {
         let config = AgentConfig(configVersion: 1, printers: PrintersConfig(ppd: "/nope.ppd", queues: [.init(name: "A", uri: "lpd://1.2.3.4/")]))
         let runner = try makeRunner(tempDir(), shell: FakeShell(), system: FakeSystem(), modules: [PrinterQueuesModule()])

@@ -17,6 +17,7 @@ public enum ModuleRegistry {
         DockModule(),
         WallpaperModule(),
         PrinterPresetsModule(),
+        BrowserFirstRunModule(),
         DefaultBrowserModule(),  // last: it can wait on the user answering a system dialog
         // Last, so it sees this run's results before removing anything.
         LegacyCleanupModule(),

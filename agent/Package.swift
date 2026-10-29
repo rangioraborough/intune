@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "macagent", targets: ["macagent"]),
         .executable(name: "MacAgentMenu", targets: ["MacAgentMenu"]),
+        .executable(name: "MacAgentConsole", targets: ["MacAgentConsole"]),
     ],
     targets: [
         .target(
@@ -19,6 +20,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "MacAgentMenu",
+            dependencies: ["MacAgentCore"]
+        ),
+        .executableTarget(
+            name: "MacAgentConsole",
             dependencies: ["MacAgentCore"]
         ),
         .testTarget(

@@ -184,7 +184,6 @@ struct StatusWindow: View {
                 Spacer()
                 Button("Copy diagnostics") { model.copyDiagnostics() }
             }
-            Text("MacAgent \(AgentVersion.current)").font(.caption2).foregroundStyle(.tertiary)
         }
         .padding(20)
         .frame(width: 440)

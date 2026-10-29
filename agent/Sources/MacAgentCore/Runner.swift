@@ -9,13 +9,17 @@ public struct RunOptions: Sendable {
     public var force: Bool
     /// Report what would change without changing anything or saving state.
     public var dryRun: Bool
+    /// Modules to force this run (e.g. re-apply requested from the console).
+    public var forceModules: Set<String> = []
 
-    public init(scope: Scope, subject: String, only: String? = nil, force: Bool = false, dryRun: Bool = false) {
+    public init(scope: Scope, subject: String, only: String? = nil, force: Bool = false, dryRun: Bool = false,
+                forceModules: Set<String> = []) {
         self.scope = scope
         self.subject = subject
         self.only = only
         self.force = force
         self.dryRun = dryRun
+        self.forceModules = forceModules
     }
 }
 
@@ -69,17 +73,25 @@ public struct Runner: Sendable {
         let selected = modules.filter { $0.scope == options.scope && (options.only == nil || $0.id == options.only) }
 
         for module in selected {
-            guard let hash = module.configHash(config) else { continue }   // disabled or unconfigured
+            guard let hash = module.configHash(config) else {
+                // Disabled or no longer configured: drop its last result so status and the console
+                // don't keep showing e.g. an old failure for a module that no longer runs.
+                if !options.dryRun, state.get(module: module.id, subject: options.subject) != nil {
+                    try? state.remove(module: module.id, subject: options.subject)
+                }
+                continue
+            }
             let previous = state.get(module: module.id, subject: options.subject)
 
-            if module.enforce == .once, !options.force,
+            let force = options.force || options.forceModules.contains(module.id)
+            if module.enforce == .once, !force,
                let previous, previous.configHash == hash, previous.result.isApplied {
                 continue   // applied for this config already; the user owns it now
             }
 
             var data = previous?.data ?? [:]
             let context = ModuleContext(config: config, subject: options.subject, dryRun: options.dryRun,
-                                        force: options.force, shell: shell, system: system, prefs: prefs,
+                                        force: force, shell: shell, system: system, prefs: prefs,
                                         paths: paths, appliedAnywhere: appliedAnywhere)
             let started = now()
             var result: RunResult

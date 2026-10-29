@@ -74,6 +74,11 @@ public final class StateStore: @unchecked Sendable {
                   s.duration, s.detail, s.agentVersion, data])
     }
 
+    /// Forget one module's result for one subject.
+    public func remove(module: String, subject: String) throws {
+        try run("DELETE FROM module_state WHERE module = ? AND subject = ?", [module, subject])
+    }
+
     /// Forget a module (or everything) so it re-applies on the next run.
     public func reset(module: String?) throws {
         if let module { try run("DELETE FROM module_state WHERE module = ?", [module]) }

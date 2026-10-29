@@ -5,6 +5,8 @@
 
 APP="/Applications/MacAgent.app"
 DAEMON="/Library/LaunchDaemons/nz.co.myers.macagent.daemon.plist"
+REPORT="/Library/LaunchDaemons/nz.co.myers.macagent.report.plist"
+LISTEN="/Library/LaunchDaemons/nz.co.myers.macagent.listen.plist"
 AGENT="/Library/LaunchAgents/nz.co.myers.macagent.session.plist"
 MENU="/Library/LaunchAgents/nz.co.myers.macagent.menu.plist"
 TRIGGER="/Library/Application Support/MacAgent/Trigger"
@@ -14,14 +16,16 @@ TRIGGER="/Library/Application Support/MacAgent/Trigger"
 
 /bin/mkdir -p /usr/local/bin /Library/Logs/MacAgent
 /bin/ln -sf "$APP/Contents/MacOS/macagent" /usr/local/bin/macagent
-/usr/sbin/chown root:wheel "$DAEMON" "$AGENT" "$MENU"
-/bin/chmod 644 "$DAEMON" "$AGENT" "$MENU"
+/usr/sbin/chown root:wheel "$DAEMON" "$REPORT" "$LISTEN" "$AGENT" "$MENU"
+/bin/chmod 644 "$DAEMON" "$REPORT" "$LISTEN" "$AGENT" "$MENU"
 ## Any user may drop a file here to ask for a run (the menu bar's Check now). Sticky, so users
 ## can't touch each other's files. The daemon only ever starts a normal run from it.
 /bin/mkdir -p "$TRIGGER"
 /bin/chmod 1777 "$TRIGGER"
 
 /bin/launchctl bootstrap system "$DAEMON"
+/bin/launchctl bootstrap system "$REPORT"
+/bin/launchctl bootstrap system "$LISTEN"
 
 uid=$(/usr/bin/stat -f %u /dev/console)
 if [ "$uid" -gt 0 ]; then

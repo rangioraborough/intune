@@ -9,11 +9,18 @@ public struct PrinterPresetsModule: Module {
 
     public init() {}
 
-    struct HashInput: Encodable { let presets: String?; let defaultQueue: String?; let presetSettings: [String: PlistValue]? }
+    /// Bump to make every user's presets re-apply once. 2: the print dialog had rebuilt "Default
+    /// Settings" / "Last Used Settings" as two-sided from the queue PPD before its default was fixed.
+    static let scheme = 2
+
+    struct HashInput: Encodable {
+        let scheme: Int; let presets: String?; let defaultQueue: String?; let presetSettings: [String: PlistValue]?
+    }
 
     public func configHash(_ config: AgentConfig) -> String? {
         guard let p = config.printers, p.presets != nil || p.defaultQueue != nil || p.presetSettings != nil else { return nil }
-        return ConfigHash.of(HashInput(presets: p.presets, defaultQueue: p.defaultQueue, presetSettings: p.presetSettings))
+        return ConfigHash.of(HashInput(scheme: Self.scheme, presets: p.presets, defaultQueue: p.defaultQueue,
+                                       presetSettings: p.presetSettings))
     }
 
     /// Write `settings` into every preset's settings dict and each printer's last-used settings.

@@ -135,3 +135,36 @@ private func session(_ user: String = "annabellesimpson") -> RunOptions { RunOpt
         #expect(PrinterQueuesModule.currentDefault(of: "Nope", in: listing) == nil)
     }
 }
+
+@Suite struct BrowserFirstRunTests {
+    let chrome = "/Applications/Google Chrome.app"
+    let marker = "Library/Application Support/Google/Chrome/First Run"
+
+    @Test func createsMarkerOnceAndKeepsExisting() throws {
+        let tmp = tempDir()
+        let home = tmp.appendingPathComponent("home")
+        let config = AgentConfig(configVersion: 1, defaultBrowser: DefaultBrowserConfig(app: chrome, skipFirstRun: true))
+        let runner = try makeRunner(tmp, shell: FakeShell(), system: FakeSystem(), modules: [BrowserFirstRunModule(home: home)])
+        #expect(runner.run(config: config, options: session()).results["browser-first-run"] == .changed)
+        #expect(FileManager.default.fileExists(atPath: home.appendingPathComponent(marker).path))
+
+        let other = tmp.appendingPathComponent("other")
+        let existing = other.appendingPathComponent(marker)
+        try FileManager.default.createDirectory(at: existing.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: existing)
+        let runner2 = try makeRunner(tempDir(), shell: FakeShell(), system: FakeSystem(), modules: [BrowserFirstRunModule(home: other)])
+        #expect(runner2.run(config: config, options: session()).results["browser-first-run"] == .ok)
+        #expect(try Data(contentsOf: existing) == Data("keep".utf8))
+    }
+
+    @Test func offUnlessAskedFor() throws {
+        let config = AgentConfig(configVersion: 1, defaultBrowser: DefaultBrowserConfig(app: chrome))
+        #expect(BrowserFirstRunModule().configHash(config) == nil)
+    }
+
+    @Test func turningItOnDoesNotReaskDefaultBrowser() {
+        let before = AgentConfig(configVersion: 1, defaultBrowser: DefaultBrowserConfig(app: chrome))
+        let after = AgentConfig(configVersion: 1, defaultBrowser: DefaultBrowserConfig(app: chrome, skipFirstRun: true))
+        #expect(DefaultBrowserModule().configHash(before) == DefaultBrowserModule().configHash(after))
+    }
+}

@@ -8,7 +8,10 @@ public struct PrinterQueuesModule: Module {
     public let scope = Scope.device
     public let enforce = Enforce.always
 
-    public init() {}
+    /// Where CUPS keeps each queue's copy of the PPD.
+    let ppdDir: URL
+
+    public init(ppdDir: URL = URL(fileURLWithPath: "/etc/cups/ppd")) { self.ppdDir = ppdDir }
 
     struct HashInput: Encodable {
         let ppd: String; let queues: [PrintersConfig.Queue]; let defaultQueue: String?; let options: [String: String]?
@@ -37,6 +40,7 @@ public struct PrinterQueuesModule: Module {
         if !toAdd.isEmpty, !ctx.dryRun {
             let ppd = try Self.plainPPD(cfg.ppd, shell: ctx.shell)
             defer { try? FileManager.default.removeItem(at: ppd.deletingLastPathComponent()) }
+            _ = try Self.setPPDDefaults(cfg.options ?? [:], in: ppd)
             var failed: [String] = []
             for q in toAdd {
                 let r = ctx.shell.run("/usr/sbin/lpadmin", ["-p", q.name, "-E", "-v", q.uri, "-P", ppd.path,
@@ -49,6 +53,8 @@ public struct PrinterQueuesModule: Module {
         }
 
         // Queue defaults, e.g. Duplex=None. `lpoptions -l` marks the current default with *.
+        // lpadmin's -default only reaches printers.conf; the print dialog builds its "Default
+        // Settings" from the queue's PPD, so its *Default lines are set too.
         if let options = cfg.options, !options.isEmpty {
             for q in cfg.queues where !toAdd.contains(where: { $0.name == q.name }) || !ctx.dryRun {
                 let listing = ctx.shell.run("/usr/bin/lpoptions", ["-p", q.name, "-l"]).stdout
@@ -57,6 +63,10 @@ public struct PrinterQueuesModule: Module {
                     changes.append("\(q.name) \(option)=\(value)")
                     if !ctx.dryRun { try ctx.shell.check("/usr/sbin/lpadmin", ["-p", q.name, "-o", "\(option)-default=\(value)"]) }
                 }
+                let queuePPD = ppdDir.appendingPathComponent("\(q.name).ppd")
+                guard FileManager.default.fileExists(atPath: queuePPD.path) else { continue }
+                let fixed = try Self.setPPDDefaults(options, in: queuePPD, dryRun: ctx.dryRun)
+                changes += fixed.map { "\(q.name) PPD \($0)" }
             }
         }
 
@@ -77,6 +87,29 @@ public struct PrinterQueuesModule: Module {
             return line.split(separator: " ").first(where: { $0.hasPrefix("*") }).map { String($0.dropFirst()) }
         }
         return nil
+    }
+
+    /// Rewrites "*DefaultDuplex: DuplexNoTumble" style lines to the configured values. Returns
+    /// the options it changed, e.g. ["Duplex=None"]. Options the PPD doesn't have are ignored.
+    static func setPPDDefaults(_ options: [String: String], in ppd: URL, dryRun: Bool = false) throws -> [String] {
+        guard !options.isEmpty else { return [] }
+        let original = try String(contentsOf: ppd, encoding: .isoLatin1)
+        var changed: [String] = []
+        var lines = original.components(separatedBy: "\n")
+        for (i, line) in lines.enumerated() {
+            for (option, value) in options.sorted(by: { $0.key < $1.key }) {
+                let prefix = "*Default\(option):"
+                guard line.hasPrefix(prefix) else { continue }
+                let current = line.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard current != value else { continue }
+                lines[i] = "\(prefix) \(value)" + (line.hasSuffix("\r") ? "\r" : "")
+                changed.append("\(option)=\(value)")
+            }
+        }
+        if !changed.isEmpty, !dryRun {
+            try lines.joined(separator: "\n").write(to: ppd, atomically: true, encoding: .isoLatin1)
+        }
+        return changed
     }
 
     /// lpadmin -P wants a plain PPD; drivers often install them gzipped.

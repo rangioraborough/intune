@@ -102,3 +102,31 @@ Build: `agent/build.sh` (`APP_IDENTITY=-` for ad-hoc) and `site/build-site.sh rb
 a config plist over; as root put the config at `/Library/Application Support/MacAgent/config-cache.plist`
 (never write into `/Library/Managed Preferences`, which Intune owns), install the site pkg then the agent.
 Check with `sudo macagent status`, `macagent desktop`, and the logs.
+
+
+## Update 2026-10-30: console, 0.3.x, where we're up to
+
+**MacAgent Console** (`agent/Sources/MacAgentConsole`, build with `agent/build-console.sh`) runs on the IT
+iMac (`iMac-Sysadmin`, currently Wi-Fi `10.46.0.93` - needs a DHCP reservation, then update `Console.URL`
+in rbs.plist). Keys: `~/Library/Application Support/MacAgent Console/keys.json` (back it up).
+- Overview page, per-Mac detail, version badges, Check now, Re-apply, Update (agent / site / config),
+  Add Mac (SSH install; default password in the iMac Keychain), Setup (config snippet + package library).
+- Macs report every 10 min (`nz.co.myers.macagent.report`) and, from 0.3.3, keep a long-poll open
+  (`nz.co.myers.macagent.listen`) so console requests apply within seconds. Requests are Ed25519-signed
+  by the console; reports and downloads are HMAC-signed with the fleet key.
+- Updates are checksum-only for now (user's choice); switch to signed-only once the Developer ID
+  Installer certificate exists.
+
+**Agent versions:** 0.3.3 is current (dist/MacAgent-0.3.3.pkg). Each release: bump
+`AgentVersion.current`, `./build.sh`, then Overview > "Update N Macs".
+- Sue (10.46.0.66): 0.3.3, instant requests working - try Check now first thing Monday.
+- Alison, Dee, Jasmine, Marie, Rachel, Yuta: 0.3.x. Use the console's Update to bring them to 0.3.3.
+- Annabelle (now 10.46.0.69), Emma (10.46.0.82), Kylee (10.46.0.12): still 0.2.0; reinstall once with
+  Add Mac (0.2.0 can't take console updates).
+- Kelly: IP unknown, on an old build.
+
+**Printing:** one-sided everywhere (presets, last-used, queue default and, from 0.3.2, the queue PPD's
+*Default lines). printer-presets re-applies once per user on 0.3.2+.
+
+**Other session (intune-34)** worked in parallel on printers/menu bar/Chrome first-run/Bonjour names;
+its changes are in this commit too. Chrome first-run is off in the config (macOS 27 blocks it).

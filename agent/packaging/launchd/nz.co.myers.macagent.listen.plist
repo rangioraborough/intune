@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>nz.co.myers.macagent.listen</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/MacAgent.app/Contents/MacOS/macagent</string>
+        <string>listen</string>
+    </array>
+    <!-- Always running: keeps one idle request open to the MacAgent Console so its buttons reach
+         this Mac within seconds. Nothing listens on this Mac. Idles if no Console is configured. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/MacAgent/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/MacAgent/launchd.log</string>
+</dict>
+</plist>

@@ -10,6 +10,7 @@ let usage = """
       macagent config [--config PLIST]       validate and print the config the agent would use
       macagent state reset [ID] [--scope device|session]
       macagent hash-password                 make AdminAccount.PasswordHash for the Intune config
+      macagent report                        send status to the console now and act on its requests (root)
       macagent desktop                       this user's wallpaper and default browser (run as the user)
       macagent version
 
@@ -77,6 +78,29 @@ func loadConfig(_ args: Args, paths: Paths, updateCache: Bool) -> ConfigLoadResu
     return ConfigLoader(paths: paths).load(updateCache: updateCache)
 }
 
+/// Build this Mac's report (device + every user's state), send it, act on signed actions in the reply.
+func sendReport(console: ConsoleConfig, configVersion: Int?, verbose: Bool = false) {
+    let shell = SystemCommandRunner()
+    let reporter = FleetReporter(console: console, paths: .device(), shell: shell, system: LiveSystemInfo(shell: shell))
+    let device = (try? StateStore(url: Paths.device().stateDB, readOnly: true))?.all() ?? []
+    var users: [ModuleState] = []
+    for user in ((try? FileManager.default.contentsOfDirectory(atPath: "/Users")) ?? []) where !user.hasPrefix(".") {
+        let db = Paths.session(home: URL(fileURLWithPath: "/Users/\(user)")).stateDB
+        if let store = try? StateStore(url: db, readOnly: true) { users += store.all() }
+    }
+    let report = reporter.buildReport(configVersion: configVersion, deviceState: device, userStates: users)
+    do {
+        let response = try reporter.send(report)
+        let results = reporter.handle(response.actions, serial: report.serial)
+        if verbose {
+            print("reported to \(console.url)")
+            for r in results { print("action \(r.id): \(r.ok ? "ok" : "failed") - \(r.detail)") }
+        }
+    } catch {
+        if verbose { print("could not report: \(error)") }
+    }
+}
+
 let argv = Array(CommandLine.arguments.dropFirst())
 let command = argv.first ?? "help"
 let args = Args(Array(argv.dropFirst()), valued: ["scope", "module", "config"])
@@ -117,8 +141,9 @@ case "run":
     do { state = try StateStore(url: p.stateDB) } catch { fail("\(error)", code: 1) }
     let runner = Runner(modules: ModuleRegistry.all, state: state, log: log, shell: shell,
                         system: LiveSystemInfo(shell: shell), paths: p)
-    let options = RunOptions(scope: scope, subject: subject, only: args.flags["module"],
+    var options = RunOptions(scope: scope, subject: subject, only: args.flags["module"],
                              force: args.has("force"), dryRun: args.has("dry-run"))
+    options.forceModules = FleetRequests.load(.device()).modulesToForce(state: state, subject: subject)
     let started = Date()
     var summary = runner.run(config: config, options: options)
     // The daemon kickstarts us after device changes, but launchd drops that if we're still running
@@ -140,8 +165,45 @@ case "run":
        let uid = shell.run("/usr/bin/id", ["-u", user]).trimmedOutput.nonEmpty {
         _ = shell.run("/bin/launchctl", ["kickstart", "gui/\(uid)/\(AgentIdentity.sessionLabel)"])
     }
+    // Fresh status for the console straight after a device run.
+    if scope == .device, !args.has("dry-run"), let console = config.console {
+        sendReport(console: console, configVersion: config.configVersion)
+    }
     withExtendedLifetime(lock) {}
     exit(summary.failed ? 1 : 0)
+
+case "report":
+    // Run by its own LaunchDaemon every 10 minutes: tell the console how this Mac is, pick up actions.
+    guard getuid() == 0 else { fail("report must run as root (try sudo)") }
+    guard case .loaded(let config, _) = ConfigLoader(paths: .device()).load(updateCache: false),
+          let console = config.console else {
+        exit(0)   // no console configured: nothing to do
+    }
+    sendReport(console: console, configVersion: config.configVersion, verbose: isatty(STDOUT_FILENO) == 1)
+
+case "listen":
+    // Kept running by its own LaunchDaemon: holds a request open to the console so its buttons
+    // (Check now, Update, Re-apply) reach this Mac within seconds. Results go back in a report.
+    guard getuid() == 0 else { fail("listen must run as root") }
+    let listenShell = SystemCommandRunner()
+    var serial: String?
+    while true {
+        guard case .loaded(let config, _) = ConfigLoader(paths: .device()).load(updateCache: false),
+              let console = config.console else { sleep(300); continue }
+        if serial == nil { serial = try? LiveSystemInfo(shell: listenShell).hardware().serial }
+        guard let mySerial = serial else { sleep(60); continue }
+        let reporter = FleetReporter(console: console, paths: .device(), shell: listenShell,
+                                     system: LiveSystemInfo(shell: listenShell))
+        do {
+            let actions = try reporter.wait(serial: mySerial)
+            if !actions.isEmpty {
+                reporter.handle(actions, serial: mySerial)
+                sendReport(console: console, configVersion: config.configVersion)   // results back now
+            }
+        } catch {
+            sleep(30)   // console off or unreachable: try again shortly
+        }
+    }
 
 case "status":
     let formatter = DateFormatter()

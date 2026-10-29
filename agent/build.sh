@@ -25,7 +25,7 @@ APP="$ROOT/Applications/MacAgent.app"
 PKG="$DIST/MacAgent-$VERSION.pkg"
 
 echo "==> MacAgent $VERSION"
-rm -rf "$DIST"
+rm -rf "$ROOT" "$DIST"/component.*   # leave other builds (the Console app) and the last pkg alone
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ROOT/Library/LaunchDaemons" "$ROOT/Library/LaunchAgents"
 
 echo "==> Testing"
@@ -46,7 +46,9 @@ sed "s/__VERSION__/$VERSION/g" packaging/Info.plist > "$APP/Contents/Info.plist"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"   # regenerate: swift packaging/make-icon.swift "$PWD/packaging/AppIcon.icns"
 cp vendor/Installomator.sh "$APP/Contents/Resources/Installomator.sh"
 chmod 755 "$APP/Contents/Resources/Installomator.sh"
-cp packaging/launchd/nz.co.myers.macagent.daemon.plist "$ROOT/Library/LaunchDaemons/"
+cp packaging/launchd/nz.co.myers.macagent.daemon.plist packaging/launchd/nz.co.myers.macagent.report.plist \
+    packaging/launchd/nz.co.myers.macagent.listen.plist \
+    "$ROOT/Library/LaunchDaemons/"
 cp packaging/launchd/nz.co.myers.macagent.session.plist packaging/launchd/nz.co.myers.macagent.menu.plist \
     "$ROOT/Library/LaunchAgents/"
 
@@ -96,5 +98,7 @@ if [ -n "$NOTARY_PROFILE" ]; then
     fi
 fi
 
+# Only now remove older agent pkgs: installs in progress elsewhere can keep using them until here.
+for old in "$DIST"/MacAgent-*.pkg; do [ "$old" = "$PKG" ] || rm -f "$old"; done
 echo "==> Built $PKG"
 shasum -a 256 "$PKG"

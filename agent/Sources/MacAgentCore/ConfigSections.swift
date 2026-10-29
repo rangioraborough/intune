@@ -77,10 +77,19 @@ public struct AvatarConfig: Codable, Equatable, Sendable {
 public struct DefaultBrowserConfig: Codable, Equatable, Sendable {
     /// e.g. /Applications/Google Chrome.app
     public var app: String
+    /// Skip the browser's own first-run welcome (Chrome's "make default / send usage statistics"
+    /// box). The agent asks about the default itself, so the box only adds a second prompt.
+    public var skipFirstRun: Bool?
 
-    enum CodingKeys: String, CodingKey { case app = "App" }
+    enum CodingKeys: String, CodingKey {
+        case app = "App"
+        case skipFirstRun = "SkipFirstRun"
+    }
 
-    public init(app: String) { self.app = app }
+    public init(app: String, skipFirstRun: Bool? = nil) {
+        self.app = app
+        self.skipFirstRun = skipFirstRun
+    }
 }
 
 public struct MAUConfig: Codable, Equatable, Sendable {

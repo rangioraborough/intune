@@ -53,12 +53,15 @@ public struct StatusReport: Equatable, Sendable {
         return StatusReport(states: states)
     }
 
-    public var headline: String {
+    /// "MacAgent 0.3.1 · No issues": which agent this is, and whether anything needs attention.
+    public var headline: String { "MacAgent \(AgentVersion.current) · \(issueSummary)" }
+
+    public var issueSummary: String {
         if rows.isEmpty { return "Waiting for first check" }
         switch problems.count {
-        case 0: return "This Mac is set up"
-        case 1: return "1 thing needs attention"
-        default: return "\(problems.count) things need attention"
+        case 0: return "No issues"
+        case 1: return "1 issue"
+        default: return "\(problems.count) issues"
         }
     }
 

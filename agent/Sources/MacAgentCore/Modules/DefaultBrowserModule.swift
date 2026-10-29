@@ -12,7 +12,11 @@ public struct DefaultBrowserModule: Module {
 
     public init(desktop: Desktop? = nil) { self.desktop = desktop }
 
-    public func configHash(_ config: AgentConfig) -> String? { config.defaultBrowser.map(ConfigHash.of) }
+    /// Only the browser counts: SkipFirstRun belongs to BrowserFirstRunModule, and changing it
+    /// mustn't re-ask users who already answered.
+    public func configHash(_ config: AgentConfig) -> String? {
+        config.defaultBrowser.map { DefaultBrowserConfig(app: $0.app) }.map(ConfigHash.of)
+    }
 
     public func run(_ ctx: ModuleContext, data: inout [String: String]) throws -> Outcome {
         guard let cfg = ctx.config.defaultBrowser else { return .ok("not configured") }

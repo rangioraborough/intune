@@ -66,13 +66,36 @@ public struct DeviceNameModule: Module {
 
         let desired = ["ComputerName": name, "LocalHostName": hostName, "HostName": hostName]
         var changes: [String] = []
+        var clash: String?
         for key in ["ComputerName", "LocalHostName", "HostName"] {
             let current = ctx.shell.run("/usr/sbin/scutil", ["--get", key]).trimmedOutput
             guard current != desired[key] else { continue }
+            // Another Mac on the network has this name (e.g. the old Mac a user is replacing), so
+            // Bonjour added "-2". Renaming it back just makes Bonjour add it again, every run, so
+            // keep the suffix and only try the real name again once a day.
+            if key == "LocalHostName", Self.isBonjourSuffixed(current, of: hostName) {
+                let last = data["clashTried"].flatMap(Double.init) ?? 0
+                if Date().timeIntervalSince1970 - last < Self.clashRetry && !ctx.force {
+                    clash = current
+                    continue
+                }
+                if !ctx.dryRun { data["clashTried"] = String(Date().timeIntervalSince1970) }
+            }
             changes.append("\(key) \"\(current)\" → \"\(desired[key]!)\"")
             if !ctx.dryRun { try ctx.shell.check("/usr/sbin/scutil", ["--set", key, desired[key]!]) }
         }
-        return changes.isEmpty ? .ok("named \(name)") : .changed(changes.joined(separator: ", "))
+        if !changes.isEmpty { return .changed(changes.joined(separator: ", ")) }
+        if let clash { return .ok("named \(name); network name is \(clash) because another Mac on the network is \(hostName)") }
+        return .ok("named \(name)")
+    }
+
+    static let clashRetry: TimeInterval = 24 * 3600
+
+    /// "MacMini-SueCollie-2" for "MacMini-SueCollie": what Bonjour does on a name conflict.
+    static func isBonjourSuffixed(_ current: String, of name: String) -> Bool {
+        guard current.hasPrefix(name + "-") else { return false }
+        let suffix = current.dropFirst(name.count + 1)
+        return !suffix.isEmpty && suffix.allSatisfy(\.isNumber)
     }
 
     /// Longest matching prefix wins, so "MacBook Air" beats "MacBook". Unknown models get the
