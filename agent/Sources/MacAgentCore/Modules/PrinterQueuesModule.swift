@@ -28,8 +28,12 @@ public struct PrinterQueuesModule: Module {
             return .waiting("printer driver not installed yet (no \((cfg.ppd as NSString).lastPathComponent))")
         }
 
+        // Copiers removed from this Mac from the console stay off it.
+        let removed = FleetRequests.load(ctx.paths).removed
+        let queues = cfg.queues.filter { !removed.contains($0.name) }
+
         var toAdd: [PrintersConfig.Queue] = []
-        for q in cfg.queues {
+        for q in queues {
             // "device for Ruru_Copier: lpd://10.69.192.23/" (CUPS often drops the trailing slash)
             let line = ctx.shell.run("/usr/bin/lpstat", ["-v", q.name]).trimmedOutput
             let existing = line.range(of: ": ").map { String(line[$0.upperBound...]) } ?? ""
@@ -56,7 +60,7 @@ public struct PrinterQueuesModule: Module {
         // lpadmin's -default only reaches printers.conf; the print dialog builds its "Default
         // Settings" from the queue's PPD, so its *Default lines are set too.
         if let options = cfg.options, !options.isEmpty {
-            for q in cfg.queues where !toAdd.contains(where: { $0.name == q.name }) || !ctx.dryRun {
+            for q in queues where !toAdd.contains(where: { $0.name == q.name }) || !ctx.dryRun {
                 let listing = ctx.shell.run("/usr/bin/lpoptions", ["-p", q.name, "-l"]).stdout
                 for (option, value) in options.sorted(by: { $0.key < $1.key }) {
                     guard Self.currentDefault(of: option, in: listing) != value else { continue }
@@ -70,11 +74,13 @@ public struct PrinterQueuesModule: Module {
             }
         }
 
-        if let def = cfg.defaultQueue, !ctx.shell.run("/usr/bin/lpstat", ["-d"]).stdout.contains(":") {
+        // The configured default, or the first remaining copier if that one was removed here.
+        let wantedDefault = cfg.defaultQueue.flatMap { removed.contains($0) ? nil : $0 } ?? queues.first?.name
+        if let def = wantedDefault, !ctx.shell.run("/usr/bin/lpstat", ["-d"]).stdout.contains(":") {
             changes.append("Mac default printer \(def)")
             if !ctx.dryRun { try ctx.shell.check("/usr/bin/lpoptions", ["-d", def]) }
         }
-        return changes.isEmpty ? .ok("\(cfg.queues.count) printers set up") : .changed(changes.joined(separator: ", "))
+        return changes.isEmpty ? .ok("\(queues.count) printers set up" + (removed.isEmpty ? "" : ", \(removed.count) removed here")) : .changed(changes.joined(separator: ", "))
     }
 
     static func trimSlash(_ s: String) -> String { s.hasSuffix("/") ? String(s.dropLast()) : s }

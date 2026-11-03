@@ -86,7 +86,7 @@ public struct PrinterPresetsModule: Module {
             if n > 0 { done.append("updated \(n) preset\(n == 1 ? "" : "s") (\(settings.keys.sorted().joined(separator: ", ")))") }
         }
 
-        if let queue = cfg.defaultQueue {
+        if let queue = cfg.defaultQueue, !FleetRequests.load(ctx.paths).removed.contains(queue) {
             guard ctx.shell.run("/usr/bin/lpstat", ["-p", queue]).succeeded else {
                 return .waiting("printer \(queue) isn't set up yet")
             }

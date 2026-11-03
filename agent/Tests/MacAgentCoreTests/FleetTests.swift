@@ -73,4 +73,73 @@ import Testing
         #expect(console.validate().isEmpty)
         #expect(ConsoleConfig(url: "nope", fleetKey: "x", publicKey: "y").validate().count == 3)
     }
+
+    @Test func parsesInstalledPrinters() {
+        let list = FleetReporter.parsePrinters(
+            devices: "device for Ruru_Copier: lpd://10.69.192.23\ndevice for Tony_s_Printer: dnssd://x\n",
+            defaultLine: "system default destination: Ruru_Copier\n",
+            details: "printer Ruru_Copier is idle.  enabled since x\n\tForm mounted:\n\tDescription: Ruru Copier\nprinter Tony_s_Printer is idle.\n\tDescription: Tony's Printer\n")
+        #expect(list.map(\.name) == ["Ruru_Copier", "Tony_s_Printer"])
+        #expect(list[0].isDefault && !list[1].isDefault)
+        #expect(list[0].description == "Ruru Copier")
+        #expect(list[1].uri == "dnssd://x")
+    }
+
+    @Test func printerNameIsPartOfWhatsSigned() throws {
+        var a = try FleetAction(id: "p", serial: "SERIAL1", kind: .removePrinter, module: nil, issued: Date(),
+                                expires: Date(timeIntervalSinceNow: 60), printer: "Tui_Copier").signed(with: consoleKey)
+        try a.verify(publicKey: console.publicKey, serial: "SERIAL1")
+        a.printer = "Ruru_Copier"
+        #expect(throws: FleetAction.Rejection.badSignature) { try a.verify(publicKey: console.publicKey, serial: "SERIAL1") }
+    }
+
+    func printerSetup() throws -> (Paths, FleetReporter, ScriptedShell) {
+        let p = testPaths(tempDir())
+        try FileManager.default.createDirectory(at: p.configCache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let cfg = AgentConfig(configVersion: 1, printers: PrintersConfig(ppd: "/x", queues: [.init(name: "Ruru_Copier", uri: "lpd://1/")]))
+        try PropertyListEncoder().encode(cfg).write(to: p.configCache)
+        let shell = ScriptedShell()
+        return (p, FleetReporter(console: console, paths: p, shell: shell, system: FakeSystem()), shell)
+    }
+
+    @Test func removedSchoolCopierStaysRemovedUntilAdded() throws {
+        let (p, reporter, shell) = try printerSetup()
+        #expect(try reporter.removePrinter("Ruru_Copier") == "removed Ruru_Copier")
+        #expect(shell.calls.contains("/usr/sbin/lpadmin -x Ruru_Copier"))
+        #expect(FleetRequests.load(p).removed == ["Ruru_Copier"])
+        #expect(try reporter.addPrinter("Ruru_Copier") == "added Ruru_Copier")
+        #expect(FleetRequests.load(p).removed.isEmpty)
+    }
+
+    @Test func refusesBadPrinterRequests() throws {
+        let (p, reporter, shell) = try printerSetup()
+        #expect(throws: ModuleError.self) { try reporter.addPrinter("Not_A_School_Copier") }
+        for bad in ["-x", "a b", "../etc", "a;rm", ""] {
+            #expect(throws: ModuleError.self) { try reporter.removePrinter(bad) }
+        }
+        #expect(!shell.calls.contains { $0.hasPrefix("/usr/sbin/lpadmin") })
+        _ = try reporter.removePrinter("Tony_s_Printer")   // not a school copier: removed, not remembered
+        #expect(FleetRequests.load(p).removed.isEmpty)
+    }
+
+    @Test func moduleDoesNotReAddRemovedCopierAndMovesDefault() throws {
+        let dir = tempDir()
+        let p = testPaths(dir)
+        try FileManager.default.createDirectory(at: p.configCache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FleetRequests(removedPrinters: ["Ruru_Copier"]).save(p)
+        let ppd = dir.appendingPathComponent("apeos.ppd")
+        try Data("*PPD-Adobe: \"4.3\"\n".utf8).write(to: ppd)
+        let shell = ScriptedShell { cmd in
+            if cmd.hasPrefix("/usr/bin/lpstat -v") { return CommandResult(exitCode: 1) }
+            if cmd == "/usr/bin/lpstat -d" { return CommandResult(exitCode: 0, stdout: "no system default destination\n") }
+            return CommandResult(exitCode: 0)
+        }
+        let config = AgentConfig(configVersion: 1, printers: PrintersConfig(ppd: ppd.path, queues: [
+            .init(name: "Ruru_Copier", uri: "lpd://1/"), .init(name: "Tui_Copier", uri: "lpd://2/")], defaultQueue: "Ruru_Copier"))
+        let runner = try makeRunner(dir, shell: shell, system: FakeSystem(files: [ppd.path]), modules: [PrinterQueuesModule(ppdDir: dir)])
+        #expect(runner.run(config: config, options: RunOptions(scope: .device, subject: "device")).results["printer-queues"] == .changed)
+        #expect(!shell.calls.contains { $0.hasPrefix("/usr/sbin/lpadmin -p Ruru_Copier") })
+        #expect(shell.calls.contains { $0.hasPrefix("/usr/sbin/lpadmin -p Tui_Copier") })
+        #expect(shell.calls.contains("/usr/bin/lpoptions -d Tui_Copier"))
+    }
 }

@@ -54,6 +54,13 @@ final class Library: ObservableObject {
 
     func file(sha256: String) -> LibraryFile? { files.values.first { $0.sha256 == sha256 } }
 
+    /// The school's copiers, from the config the console hands out.
+    var schoolQueues: [PrintersConfig.Queue] {
+        guard let path = files[.config]?.path,
+              case .success(let config) = ConfigLoader.decode(contentsOf: URL(fileURLWithPath: path)) else { return [] }
+        return config.printers?.queues ?? []
+    }
+
     /// Newest build in the repo's dist folders, so a fresh console works without setup.
     static func newest(_ t: FleetAction.Target) -> String? {
         let (dir, prefix) = t == .agent ? (repo + "/agent/dist", "MacAgent-") : (repo + "/site/dist", "MacAgent Site - ")

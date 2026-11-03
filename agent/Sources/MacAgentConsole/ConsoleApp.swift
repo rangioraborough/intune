@@ -181,6 +181,8 @@ struct DeviceDetail: View {
                     .fixedSize()
                 }
 
+                PrintersBox(store: store, library: library, report: r)
+
                 let history = store.actions(for: r.serial)
                 if !history.isEmpty {
                     GroupBox("Requests") {
@@ -383,5 +385,71 @@ struct AddMacSheet: View {
         }
         .padding(20)
         .frame(width: 560)
+    }
+}
+
+/// What's installed on this Mac, with Remove on each and Add for school copiers it doesn't have.
+struct PrintersBox: View {
+    @ObservedObject var store: ConsoleStore
+    @ObservedObject var library: Library
+    let report: FleetReport
+    @State private var removing: FleetReport.Printer?
+
+    static let needsAgent = "0.3.5"
+
+    var body: some View {
+        GroupBox("Printers") {
+            VStack(alignment: .leading, spacing: 6) {
+                if report.agentVersion.isOlder(than: Self.needsAgent) || report.printers == nil {
+                    Text("Update this Mac to agent \(Self.needsAgent) or later to see and change its printers.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    let printers = report.printers ?? []
+                    if printers.isEmpty { Text("No printers installed.").foregroundStyle(.secondary) }
+                    ForEach(printers, id: \.name) { p in
+                        HStack(alignment: .firstTextBaseline) {
+                            Image(systemName: "printer").foregroundStyle(.secondary).frame(width: 16)
+                            Text(p.description ?? p.name).frame(width: 190, alignment: .leading)
+                            Text(isSchool(p.name) ? "School" : "Other").font(.caption)
+                                .foregroundStyle(isSchool(p.name) ? Color.secondary : Color.orange)
+                                .frame(width: 44, alignment: .leading)
+                            if p.isDefault { Text("Default").font(.caption).foregroundStyle(.blue) }
+                            Text(p.uri).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                            Button("Remove", role: .destructive) { removing = p }.disabled(isPending(p.name))
+                        }
+                    }
+                    // Leave out pending requests rather than disabling them: an open Menu keeps a stale disabled state.
+                    let missing = library.schoolQueues.filter { q in !printers.contains { $0.name == q.name } && !isPending(q.name) }
+                    if !missing.isEmpty {
+                        Menu("Add printer…") {
+                            ForEach(missing, id: \.name) { q in
+                                Button((q.description ?? q.name) + ((report.removedPrinters ?? []).contains(q.name) ? " (removed earlier)" : "")) {
+                                    store.queue(.addPrinter, printer: q.name, for: report.serial, label: "Add \(q.description ?? q.name)")
+                                }
+                            }
+                        }
+                        .fixedSize()
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .alert("Remove \(removing?.description ?? removing?.name ?? "printer")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            Button("Remove", role: .destructive) {
+                if let p = removing { store.queue(.removePrinter, printer: p.name, for: report.serial, label: "Remove \(p.description ?? p.name)") }
+                removing = nil
+            }
+            Button("Cancel", role: .cancel) { removing = nil }
+        } message: {
+            Text(removing.map { isSchool($0.name) ? "It stays off \(report.computerName) until you add it back here." : "It's removed from \(report.computerName). The agent doesn't manage this printer, so only someone at the Mac could add it back." } ?? "")
+        }
+    }
+
+    func isSchool(_ name: String) -> Bool { library.schoolQueues.contains { $0.name == name } }
+
+    /// A request for this printer that hasn't finished yet.
+    func isPending(_ name: String) -> Bool {
+        store.actions(for: report.serial).contains { $0.action.printer == name && $0.result == nil && $0.action.expires > Date() }
     }
 }

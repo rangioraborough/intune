@@ -53,6 +53,21 @@ public struct FleetReport: Codable, Equatable, Sendable {
         }
     }
 
+    /// A printer installed on this Mac.
+    public struct Printer: Codable, Equatable, Sendable {
+        public var name: String
+        public var uri: String
+        public var description: String?
+        public var isDefault: Bool
+
+        public init(name: String, uri: String, description: String?, isDefault: Bool) {
+            self.name = name
+            self.uri = uri
+            self.description = description
+            self.isDefault = isDefault
+        }
+    }
+
     public struct ActionResult: Codable, Equatable, Sendable {
         public var id: String
         public var ok: Bool
@@ -77,10 +92,15 @@ public struct FleetReport: Codable, Equatable, Sendable {
     public var sentAt: Date
     public var states: [State]
     public var actionResults: [ActionResult]
+    /// nil from agents older than 0.3.5, which don't report printers.
+    public var printers: [Printer]?
+    /// School copiers removed from this Mac from the console; the agent won't re-add them.
+    public var removedPrinters: [String]?
 
     public init(serial: String, computerName: String, model: String, macOS: String, agentVersion: String,
                 consoleUser: String?, officeVersion: String?, configVersion: Int?, ipAddress: String?,
-                sentAt: Date, states: [State], actionResults: [ActionResult]) {
+                sentAt: Date, states: [State], actionResults: [ActionResult],
+                printers: [Printer]? = nil, removedPrinters: [String]? = nil) {
         self.serial = serial
         self.computerName = computerName
         self.model = model
@@ -93,6 +113,8 @@ public struct FleetReport: Codable, Equatable, Sendable {
         self.sentAt = sentAt
         self.states = states
         self.actionResults = actionResults
+        self.printers = printers
+        self.removedPrinters = removedPrinters
     }
 
     public var failures: [State] { states.filter { $0.result == RunResult.fail.rawValue } }
@@ -107,6 +129,10 @@ public struct FleetAction: Codable, Equatable, Sendable {
         case reapply
         /// Download a file from the console (agent pkg, site pkg or config), check its SHA-256, install it.
         case install
+        /// Add a school copier from this Mac's config, by queue name. Needs agent 0.3.5.
+        case addPrinter
+        /// Remove a printer by queue name. School copiers then stay off this Mac. Needs agent 0.3.5.
+        case removePrinter
     }
 
     /// What `install` installs.
@@ -122,11 +148,13 @@ public struct FleetAction: Codable, Equatable, Sendable {
     /// console can't be tricked into handing over a different file).
     public var target: Target?
     public var sha256: String?
+    /// For addPrinter/removePrinter: the queue name.
+    public var printer: String?
     /// Base64 Curve25519 signature over `payload`.
     public var signature: String
 
     public init(id: String, serial: String, kind: Kind, module: String?, issued: Date, expires: Date,
-                target: Target? = nil, sha256: String? = nil, signature: String = "") {
+                target: Target? = nil, sha256: String? = nil, printer: String? = nil, signature: String = "") {
         self.id = id
         self.serial = serial
         self.kind = kind
@@ -135,6 +163,7 @@ public struct FleetAction: Codable, Equatable, Sendable {
         self.expires = expires
         self.target = target
         self.sha256 = sha256
+        self.printer = printer
         self.signature = signature
     }
 
@@ -143,6 +172,7 @@ public struct FleetAction: Codable, Equatable, Sendable {
     public var payload: Data {
         var s = "macagent-action-v1|\(id)|\(serial)|\(kind.rawValue)|\(module ?? "")|\(Int(issued.timeIntervalSince1970))|\(Int(expires.timeIntervalSince1970))"
         if target != nil || sha256 != nil { s += "|\(target?.rawValue ?? "")|\(sha256 ?? "")" }
+        if let printer { s += "|printer|\(printer)" }
         return Data(s.utf8)
     }
 

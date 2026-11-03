@@ -4,8 +4,15 @@ import Foundation
 /// module last ran is forced). Written by the root reporter, read by device and session runs.
 public struct FleetRequests: Codable, Equatable, Sendable {
     public var reapply: [String: Date] = [:]
+    /// School copiers removed from this Mac from the console; optional so older files still load.
+    public var removedPrinters: [String]?
 
-    public init(reapply: [String: Date] = [:]) { self.reapply = reapply }
+    public init(reapply: [String: Date] = [:], removedPrinters: [String]? = nil) {
+        self.reapply = reapply
+        self.removedPrinters = removedPrinters
+    }
+
+    public var removed: Set<String> { Set(removedPrinters ?? []) }
 
     public static func url(_ paths: Paths) -> URL {
         paths.configCache.deletingLastPathComponent().appendingPathComponent("requests.json")
@@ -76,7 +83,76 @@ public struct FleetReporter: Sendable {
             ipAddress: ip,
             sentAt: Date(),
             states: states,
-            actionResults: loadJournal().pending)
+            actionResults: loadJournal().pending,
+            printers: installedPrinters(),
+            removedPrinters: FleetRequests.load(paths).removedPrinters ?? [])
+    }
+
+    func installedPrinters() -> [FleetReport.Printer] {
+        Self.parsePrinters(devices: shell.run("/usr/bin/lpstat", ["-v"]).stdout,
+                           defaultLine: shell.run("/usr/bin/lpstat", ["-d"]).stdout,
+                           details: shell.run("/usr/bin/lpstat", ["-l", "-p"]).stdout)
+    }
+
+    /// From `lpstat -v` ("device for Ruru_Copier: lpd://10.69.192.23/"), `lpstat -d`
+    /// ("system default destination: Ruru_Copier") and `lpstat -l -p` ("\tDescription: Ruru Copier").
+    static func parsePrinters(devices: String, defaultLine: String, details: String) -> [FleetReport.Printer] {
+        let def = defaultLine.range(of: "destination: ").map {
+            String(defaultLine[$0.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        var descriptions: [String: String] = [:]
+        var current: String?
+        for line in details.split(separator: "\n") {
+            if line.hasPrefix("printer ") {
+                current = line.split(separator: " ").dropFirst().first.map(String.init)
+            } else if let current, let r = line.range(of: "Description: ") {
+                descriptions[current] = String(line[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return devices.split(separator: "\n").compactMap { line in
+            guard line.hasPrefix("device for "), let r = line.range(of: ": ") else { return nil }
+            let name = String(line[line.index(line.startIndex, offsetBy: 11)..<r.lowerBound])
+            return FleetReport.Printer(name: name, uri: String(line[r.upperBound...]),
+                                       description: descriptions[name], isDefault: name == def)
+        }.sorted { $0.name < $1.name }
+    }
+
+    /// CUPS queue names: nothing that could be read as an option or a path.
+    static func isValidQueueName(_ name: String) -> Bool {
+        !name.isEmpty && !name.hasPrefix("-") && name.count <= 127
+            && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" || $0 == "." }
+    }
+
+    /// Run the printer module now (adds a queue, sets the default). The console then gets a fresh report.
+    func runPrinterQueues() {
+        _ = shell.run(AgentIdentity.cliPath, ["run", "--scope", "device", "--module", "printer-queues"])
+    }
+
+    func addPrinter(_ name: String) throws -> String {
+        guard case .loaded(let config, _) = ConfigLoader(paths: paths).load(updateCache: false),
+              config.printers?.queues.contains(where: { $0.name == name }) == true else {
+            throw ModuleError("\(name) isn't one of the school's copiers in this Mac's config")
+        }
+        var requests = FleetRequests.load(paths)
+        requests.removedPrinters = (requests.removedPrinters ?? []).filter { $0 != name }
+        try requests.save(paths)
+        runPrinterQueues()
+        return "added \(name)"
+    }
+
+    func removePrinter(_ name: String) throws -> String {
+        guard Self.isValidQueueName(name) else { throw ModuleError("\"\(name)\" isn't a valid printer name") }
+        // Remember school copiers first, so the agent can't re-add one half way through.
+        if case .loaded(let config, _) = ConfigLoader(paths: paths).load(updateCache: false),
+           config.printers?.queues.contains(where: { $0.name == name }) == true {
+            var requests = FleetRequests.load(paths)
+            if !requests.removed.contains(name) { requests.removedPrinters = (requests.removedPrinters ?? []) + [name] }
+            try requests.save(paths)
+        }
+        guard shell.run("/usr/bin/lpstat", ["-v", name]).succeeded else { return "\(name) was already gone" }
+        try shell.check("/usr/sbin/lpadmin", ["-x", name])
+        runPrinterQueues()   // picks a new default if that was the default
+        return "removed \(name)"
     }
 
     /// POST the report; returns the console's response. Throws if the console can't be reached.
@@ -165,6 +241,10 @@ public struct FleetReporter: Sendable {
             return "check started"
         case .install:
             return try install(action)
+        case .addPrinter:
+            return try addPrinter(action.printer ?? "")
+        case .removePrinter:
+            return try removePrinter(action.printer ?? "")
         case .reapply:
             guard let module = action.module, ModuleRegistry.all.contains(where: { $0.id == module }) else {
                 throw ModuleError("unknown module \(action.module ?? "(none)")")

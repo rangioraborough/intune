@@ -89,11 +89,12 @@ final class ConsoleStore: ObservableObject {
         devices[serial]?.lastSeen = Date()
     }
 
-    func queue(_ kind: FleetAction.Kind, module: String? = nil, file: LibraryFile? = nil, for serial: String, label: String) {
+    func queue(_ kind: FleetAction.Kind, module: String? = nil, file: LibraryFile? = nil, printer: String? = nil,
+               for serial: String, label: String) {
         guard let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: Data(base64Encoded: keys.signingKey) ?? Data()),
               let signed = try? FleetAction(id: UUID().uuidString, serial: serial, kind: kind, module: module,
                                             issued: Date(), expires: Date(timeIntervalSinceNow: 24 * 3600),
-                                            target: file?.target, sha256: file?.sha256).signed(with: key)
+                                            target: file?.target, sha256: file?.sha256, printer: printer).signed(with: key)
         else { return }
         actions.append(QueuedAction(action: signed, label: label))
         save()
