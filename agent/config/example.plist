@@ -11,7 +11,7 @@
 <dict>
     <!-- Bump when you change anything, so the log shows which config each Mac is running. -->
     <key>ConfigVersion</key>
-    <integer>1</integer>
+    <integer>2</integer>
 
     <!-- Never treated as "the user" (device naming, per-user setup). -->
     <key>ExcludedUsers</key>
@@ -266,6 +266,17 @@
          already there. Enforce: once (default, user can change later) or always (put back every run). -->
     <key>Preferences</key>
     <array>
+        <!-- Chrome: use the system print dialog instead of Chrome's own print preview. Takes effect
+             next time Chrome opens. -->
+        <dict>
+            <key>Domain</key>
+            <string>com.google.Chrome</string>
+            <key>Settings</key>
+            <dict>
+                <key>DisablePrintPreview</key>
+                <true/>
+            </dict>
+        </dict>
         <!-- Menu Bar > Fast User Switching: show it in the menu bar (Control Center item, a
              ByHost setting) as the user's Full Name (userMenuExtraStyle 0; 1 = account name, 2 = icon). -->
         <dict>
