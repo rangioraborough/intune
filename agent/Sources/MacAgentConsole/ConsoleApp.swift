@@ -161,7 +161,10 @@ struct DeviceDetail: View {
                     Button("Check now") { store.queue(.run, for: r.serial, label: "Check now") }
                     Menu("Update…") {
                         ForEach([FleetAction.Target.agent, .site, .config], id: \.self) { t in
-                            if let f = library.files[t] {
+                            if t == .config, library.hasOptionalQueues, r.agentVersion.isOlder(than: PrintersBox.optionalAgent) {
+                                // Older agents ignore Optional and would put those copiers on this Mac.
+                                Text("Config: update the agent first")
+                            } else if let f = library.files[t] {
                                 Button("\(t.title) \(f.version ?? "")") {
                                     store.queue(.install, file: f, for: r.serial, label: "Update \(t.title.lowercased()) \(f.version ?? "")")
                                 }
@@ -396,6 +399,7 @@ struct PrintersBox: View {
     @State private var removing: FleetReport.Printer?
 
     static let needsAgent = "0.3.5"
+    static let optionalAgent = "0.3.6"
 
     var body: some View {
         GroupBox("Printers") {
@@ -420,7 +424,8 @@ struct PrintersBox: View {
                         }
                     }
                     // Leave out pending requests rather than disabling them: an open Menu keeps a stale disabled state.
-                    let missing = library.schoolQueues.filter { q in !printers.contains { $0.name == q.name } && !isPending(q.name) }
+                    let missing = library.schoolQueues.filter { q in !printers.contains { $0.name == q.name } && !isPending(q.name)
+                        && (q.isOptional != true || !report.agentVersion.isOlder(than: Self.optionalAgent)) }
                     if !missing.isEmpty {
                         Menu("Add printer…") {
                             ForEach(missing, id: \.name) { q in

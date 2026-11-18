@@ -278,17 +278,21 @@ public struct PrintersConfig: Codable, Equatable, Sendable {
         public var name: String
         public var uri: String
         public var description: String?
+        /// Not set up on every Mac: only on those it's added to from the console.
+        public var isOptional: Bool?
 
         enum CodingKeys: String, CodingKey {
             case name = "Name"
             case uri = "URI"
             case description = "Description"
+            case isOptional = "Optional"
         }
 
-        public init(name: String, uri: String, description: String? = nil) {
+        public init(name: String, uri: String, description: String? = nil, isOptional: Bool? = nil) {
             self.name = name
             self.uri = uri
             self.description = description
+            self.isOptional = isOptional
         }
     }
 
@@ -303,6 +307,9 @@ public struct PrintersConfig: Codable, Equatable, Sendable {
         }
         if let d = defaultQueue, !queues.contains(where: { $0.name == d }) {
             problems.append("Default \"\(d)\" isn't one of the Queues")
+        }
+        if let d = defaultQueue, queues.contains(where: { $0.name == d && $0.isOptional == true }) {
+            problems.append("Default \"\(d)\" can't be an Optional queue")
         }
         return problems
     }

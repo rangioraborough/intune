@@ -6,13 +6,22 @@ public struct FleetRequests: Codable, Equatable, Sendable {
     public var reapply: [String: Date] = [:]
     /// School copiers removed from this Mac from the console; optional so older files still load.
     public var removedPrinters: [String]?
+    /// Optional copiers added to this Mac from the console.
+    public var addedPrinters: [String]?
 
-    public init(reapply: [String: Date] = [:], removedPrinters: [String]? = nil) {
+    public init(reapply: [String: Date] = [:], removedPrinters: [String]? = nil, addedPrinters: [String]? = nil) {
         self.reapply = reapply
         self.removedPrinters = removedPrinters
+        self.addedPrinters = addedPrinters
     }
 
     public var removed: Set<String> { Set(removedPrinters ?? []) }
+    public var added: Set<String> { Set(addedPrinters ?? []) }
+
+    /// The configured copiers this Mac should have.
+    public func wanted(_ queues: [PrintersConfig.Queue]) -> [PrintersConfig.Queue] {
+        queues.filter { !removed.contains($0.name) && ($0.isOptional != true || added.contains($0.name)) }
+    }
 
     public static func url(_ paths: Paths) -> URL {
         paths.configCache.deletingLastPathComponent().appendingPathComponent("requests.json")
@@ -130,11 +139,12 @@ public struct FleetReporter: Sendable {
 
     func addPrinter(_ name: String) throws -> String {
         guard case .loaded(let config, _) = ConfigLoader(paths: paths).load(updateCache: false),
-              config.printers?.queues.contains(where: { $0.name == name }) == true else {
+              let queue = config.printers?.queues.first(where: { $0.name == name }) else {
             throw ModuleError("\(name) isn't one of the school's copiers in this Mac's config")
         }
         var requests = FleetRequests.load(paths)
         requests.removedPrinters = (requests.removedPrinters ?? []).filter { $0 != name }
+        if queue.isOptional == true, !requests.added.contains(name) { requests.addedPrinters = (requests.addedPrinters ?? []) + [name] }
         try requests.save(paths)
         runPrinterQueues()
         return "added \(name)"
@@ -144,9 +154,13 @@ public struct FleetReporter: Sendable {
         guard Self.isValidQueueName(name) else { throw ModuleError("\"\(name)\" isn't a valid printer name") }
         // Remember school copiers first, so the agent can't re-add one half way through.
         if case .loaded(let config, _) = ConfigLoader(paths: paths).load(updateCache: false),
-           config.printers?.queues.contains(where: { $0.name == name }) == true {
+           let queue = config.printers?.queues.first(where: { $0.name == name }) {
             var requests = FleetRequests.load(paths)
-            if !requests.removed.contains(name) { requests.removedPrinters = (requests.removedPrinters ?? []) + [name] }
+            if queue.isOptional == true {
+                requests.addedPrinters = (requests.addedPrinters ?? []).filter { $0 != name }
+            } else if !requests.removed.contains(name) {
+                requests.removedPrinters = (requests.removedPrinters ?? []) + [name]
+            }
             try requests.save(paths)
         }
         guard shell.run("/usr/bin/lpstat", ["-v", name]).succeeded else { return "\(name) was already gone" }

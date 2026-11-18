@@ -122,6 +122,13 @@ import Testing
         #expect(FleetRequests.load(p).removed.isEmpty)
     }
 
+    @Test func optionalCopierOnlyGoesOnMacsItsAddedTo() throws {
+        let queues: [PrintersConfig.Queue] = [.init(name: "Ruru_Copier", uri: "lpd://1/"), .init(name: "Kakariki_Copier", uri: "lpd://2/", isOptional: true)]
+        #expect(FleetRequests().wanted(queues).map(\.name) == ["Ruru_Copier"])
+        #expect(FleetRequests(addedPrinters: ["Kakariki_Copier"]).wanted(queues).map(\.name) == ["Ruru_Copier", "Kakariki_Copier"])
+        #expect(FleetRequests(removedPrinters: ["Ruru_Copier"], addedPrinters: ["Kakariki_Copier"]).wanted(queues).map(\.name) == ["Kakariki_Copier"])
+    }
+
     @Test func moduleDoesNotReAddRemovedCopierAndMovesDefault() throws {
         let dir = tempDir()
         let p = testPaths(dir)

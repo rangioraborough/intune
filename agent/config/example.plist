@@ -11,7 +11,7 @@
 <dict>
     <!-- Bump when you change anything, so the log shows which config each Mac is running. -->
     <key>ConfigVersion</key>
-    <integer>2</integer>
+    <integer>3</integer>
 
     <!-- Never treated as "the user" (device naming, per-user setup). -->
     <key>ExcludedUsers</key>
@@ -138,6 +138,7 @@
         <key>Queues</key>
         <array>
             <dict><key>Name</key><string>Office_Copier</string><key>URI</key><string>lpd://10.69.192.21/</string><key>Description</key><string>Office Copier</string></dict>
+            <dict><key>Name</key><string>Kakariki_Copier</string><key>URI</key><string>lpd://10.69.192.22/</string><key>Optional</key><true/><key>Description</key><string>Kakariki Copier</string></dict>
             <dict><key>Name</key><string>Ruru_Copier</string><key>URI</key><string>lpd://10.69.192.23/</string><key>Description</key><string>Ruru Copier</string></dict>
             <dict><key>Name</key><string>Tui_Copier</string><key>URI</key><string>lpd://10.69.192.24/</string><key>Description</key><string>Tui Copier</string></dict>
             <dict><key>Name</key><string>Nga_Rakau_e_Rua_Copier</string><key>URI</key><string>lpd://10.69.192.25/</string><key>Description</key><string>Nga Rakau e Rua Copier</string></dict>

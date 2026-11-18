@@ -28,9 +28,10 @@ public struct PrinterQueuesModule: Module {
             return .waiting("printer driver not installed yet (no \((cfg.ppd as NSString).lastPathComponent))")
         }
 
-        // Copiers removed from this Mac from the console stay off it.
-        let removed = FleetRequests.load(ctx.paths).removed
-        let queues = cfg.queues.filter { !removed.contains($0.name) }
+        // Copiers removed from this Mac from the console stay off it; optional ones go on only when added.
+        let requests = FleetRequests.load(ctx.paths)
+        let removed = requests.removed
+        let queues = requests.wanted(cfg.queues)
 
         var toAdd: [PrintersConfig.Queue] = []
         for q in queues {

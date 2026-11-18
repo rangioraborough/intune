@@ -61,6 +61,8 @@ final class Library: ObservableObject {
         return config.printers?.queues ?? []
     }
 
+    var hasOptionalQueues: Bool { schoolQueues.contains { $0.isOptional == true } }
+
     /// Newest build in the repo's dist folders, so a fresh console works without setup.
     static func newest(_ t: FleetAction.Target) -> String? {
         let (dir, prefix) = t == .agent ? (repo + "/agent/dist", "MacAgent-") : (repo + "/site/dist", "MacAgent Site - ")
